@@ -165,6 +165,13 @@ void send_error(crow::websocket::connection& conn, const std::string& message) {
     }.dump());
 }
 
+crow::response json_response(const json& payload, int code = 200) {
+    crow::response response{code, payload.dump()};
+    response.set_header("Content-Type", "application/json");
+    response.set_header("Access-Control-Allow-Origin", "*");
+    return response;
+}
+
 void send_public_state(const std::shared_ptr<sh::Room>& room) {
     const json payload = {
         {"type", "room_state"},
@@ -244,14 +251,14 @@ int main() {
     std::unordered_map<crow::websocket::connection*, sh::Session> sessions;
 
     CROW_ROUTE(app, "/api/health")([] {
-        return crow::response{200, R"({"ok":true})"};
+        return json_response(json{{"ok", true}});
     });
 
     CROW_ROUTE(app, "/api/room/<string>")
     ([&rooms, &rooms_mutex](const std::string& room_code) {
         std::scoped_lock lock(rooms_mutex);
         auto room = rooms.get_or_create(room_code);
-        return crow::response{to_json(room->game->public_state()).dump()};
+        return json_response(to_json(*room));
     });
 
     CROW_WEBSOCKET_ROUTE(app, "/ws")
@@ -318,6 +325,10 @@ int main() {
                     return;
                 }
 
+                if (player_exists) {
+                    room->game->set_player_name(player_id, name);
+                }
+
                 room->game->set_player_connected(player_id, true);
                 if (const auto existing_connection = room->connections_by_player.find(player_id);
                     existing_connection != room->connections_by_player.end()
@@ -358,6 +369,10 @@ int main() {
             const auto& session = sessions.at(&conn);
 
             if (type == "sync_state") {
+                conn.send_text(json{
+                    {"type", "sync_ack"},
+                    {"message", "state_synced"},
+                }.dump());
                 sync_room_state(room);
                 return;
             }

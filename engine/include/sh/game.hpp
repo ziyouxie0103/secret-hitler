@@ -119,6 +119,7 @@ public:
     explicit Game(string room_code);
 
     bool add_player(string player_id, string name);
+    bool set_player_name(const string& player_id, const string& name);
     bool set_player_connected(const string& player_id, bool connected);
     bool start();
 

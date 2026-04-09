@@ -386,6 +386,16 @@ bool Game::set_player_connected(const string& player_id, bool connected) {
     return true;
 }
 
+bool Game::set_player_name(const string& player_id, const string& name) {
+    const auto index = player_index(player_id);
+    if (!index.has_value()) {
+        return false;
+    }
+
+    players_[*index].name = name;
+    return true;
+}
+
 bool Game::start() {
     if (phase_ != GamePhase::Lobby) {
         return false;

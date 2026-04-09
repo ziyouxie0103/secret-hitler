@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "name": "macOS",
+      "compilerPath": "/usr/bin/c++",
+      "cStandard": "c17",
+      "cppStandard": "c++20",
+      "intelliSenseMode": "macos-clang-arm64",
+      "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/server/include",
+        "${workspaceFolder}/engine/include",
+        "${workspaceFolder}/build/_deps/crow-src/include",
+        "/opt/homebrew/include"
+      ],
+      "defines": [
+        "CROW_USE_BOOST",
+        "ASIO_NO_DEPRECATED"
+      ]
+    }
+  ],
+  "version": 4
+}

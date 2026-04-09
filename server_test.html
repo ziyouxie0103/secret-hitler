@@ -306,6 +306,35 @@
           <div id="guide" class="callout mono">No room state yet.</div>
         </div>
         <div class="panel">
+          <h2>Public Board</h2>
+          <dl class="facts">
+            <div class="facts-row">
+              <dt>Liberal Policies</dt>
+              <dd id="board-liberal-policies">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Fascist Policies</dt>
+              <dd id="board-fascist-policies">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Draw Pile</dt>
+              <dd id="board-draw-pile">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Discard Pile</dt>
+              <dd id="board-discard-pile">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Total Liberal Cards Left</dt>
+              <dd id="board-liberal-left">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Total Fascist Cards Left</dt>
+              <dd id="board-fascist-left">-</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="panel">
           <h2>This Tab</h2>
           <dl class="facts">
             <div class="facts-row">
@@ -333,7 +362,7 @@
               <dd id="self-hand">-</dd>
             </div>
             <div class="facts-row">
-              <dt>Policy Peek</dt>
+              <dt>Last Policy Peek</dt>
               <dd id="self-policy-peek">-</dd>
             </div>
             <div class="facts-row">
@@ -375,6 +404,14 @@
             <div class="facts-row">
               <dt>Election Tracker</dt>
               <dd id="summary-tracker">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Liberal Policies</dt>
+              <dd id="summary-liberal-policies">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Fascist Policies</dt>
+              <dd id="summary-fascist-policies">-</dd>
             </div>
             <div class="facts-row">
               <dt>Pending Votes</dt>
@@ -438,9 +475,17 @@
       const summaryLastPresidentEl = document.getElementById("summary-last-president");
       const summaryLastChancellorEl = document.getElementById("summary-last-chancellor");
       const summaryTrackerEl = document.getElementById("summary-tracker");
+      const summaryLiberalPoliciesEl = document.getElementById("summary-liberal-policies");
+      const summaryFascistPoliciesEl = document.getElementById("summary-fascist-policies");
       const summaryPendingVotesEl = document.getElementById("summary-pending-votes");
       const summaryPowerEl = document.getElementById("summary-power");
       const summaryWinnerEl = document.getElementById("summary-winner");
+      const boardLiberalPoliciesEl = document.getElementById("board-liberal-policies");
+      const boardFascistPoliciesEl = document.getElementById("board-fascist-policies");
+      const boardDrawPileEl = document.getElementById("board-draw-pile");
+      const boardDiscardPileEl = document.getElementById("board-discard-pile");
+      const boardLiberalLeftEl = document.getElementById("board-liberal-left");
+      const boardFascistLeftEl = document.getElementById("board-fascist-left");
 
       const selfNameEl = document.getElementById("self-name");
       const selfIdEl = document.getElementById("self-id");
@@ -519,9 +564,17 @@
         summaryLastPresidentEl.textContent = nameForPlayerId(latestRoomState.lastPresidentId);
         summaryLastChancellorEl.textContent = nameForPlayerId(latestRoomState.lastChancellorId);
         summaryTrackerEl.textContent = String(latestRoomState.electionTracker ?? 0);
+        summaryLiberalPoliciesEl.textContent = String(latestRoomState.liberalPolicies ?? 0);
+        summaryFascistPoliciesEl.textContent = String(latestRoomState.fascistPolicies ?? 0);
         summaryPendingVotesEl.textContent = String(latestRoomState.pendingVotes ?? 0);
         summaryPowerEl.textContent = latestRoomState.pendingExecutivePower || "-";
         summaryWinnerEl.textContent = latestRoomState.winner || "-";
+        boardLiberalPoliciesEl.textContent = String(latestRoomState.liberalPolicies ?? 0);
+        boardFascistPoliciesEl.textContent = String(latestRoomState.fascistPolicies ?? 0);
+        boardDrawPileEl.textContent = String(latestRoomState.drawPileSize ?? 0);
+        boardDiscardPileEl.textContent = String(latestRoomState.discardPileSize ?? 0);
+        boardLiberalLeftEl.textContent = String(6 - (latestRoomState.liberalPolicies ?? 0));
+        boardFascistLeftEl.textContent = String(11 - (latestRoomState.fascistPolicies ?? 0));
       }
 
       function renderPlayerViewSummary() {
@@ -548,7 +601,7 @@
           ? latestPlayerView.legislativeHand.join(", ")
           : "none";
         selfPolicyPeekEl.textContent = latestPlayerView.policyPeek?.length
-          ? latestPlayerView.policyPeek.join(", ")
+          ? `${latestPlayerView.policyPeek.join(", ")} (private information you previously saw)`
           : "none";
         selfInvestigationEl.textContent = latestPlayerView.investigationResult || "none";
       }
@@ -664,6 +717,9 @@
         }
 
         lines.push(`Next action: ${nextAction}`);
+        lines.push(`Board: liberals ${latestRoomState.liberalPolicies ?? 0}, fascists ${latestRoomState.fascistPolicies ?? 0}`);
+        lines.push(`Decks: draw pile ${latestRoomState.drawPileSize ?? 0}, discard pile ${latestRoomState.discardPileSize ?? 0}`);
+        lines.push(`Policy totals left: liberals ${6 - (latestRoomState.liberalPolicies ?? 0)}, fascists ${11 - (latestRoomState.fascistPolicies ?? 0)}`);
         lines.push(`Election tracker: ${latestRoomState.electionTracker ?? 0}`);
         lines.push(`Pending votes: ${latestRoomState.pendingVotes ?? 0}`);
         lines.push(`Pending executive power: ${latestRoomState.pendingExecutivePower || "none"}`);

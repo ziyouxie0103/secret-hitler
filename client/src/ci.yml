@@ -1,0 +1,50 @@
+name: Secret Hitler CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-backend:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libboost-all-dev nlohmann-json3-dev
+
+      - name: Configure CMake
+        run: cmake -S . -B build -DSH_USE_FETCHCONTENT=ON -DSH_BUILD_TESTS=ON
+
+      - name: Build Backend
+        run: cmake --build build --config Release
+
+      - name: Run Backend Tests
+        run: ctest --test-dir build --output-on-failure
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./client
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Frontend Dependencies
+        run: npm install
+
+      - name: Build Frontend
+        run: npm run build --if-present
