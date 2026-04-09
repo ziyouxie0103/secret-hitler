@@ -1,0 +1,158 @@
+:root {
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: #f8f3e8;
+  background:
+    radial-gradient(circle at top, rgba(195, 48, 33, 0.35), transparent 35%),
+    linear-gradient(180deg, #25130f 0%, #120b09 100%);
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #e0b15c, #c8872f);
+  color: #1d1209;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.8rem 1.2rem;
+}
+
+input {
+  width: 100%;
+  border: 1px solid rgba(248, 243, 232, 0.16);
+  border-radius: 14px;
+  background: rgba(248, 243, 232, 0.08);
+  color: inherit;
+  padding: 0.85rem 1rem;
+}
+
+.shell {
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 3rem 1.25rem 4rem;
+}
+
+.hero {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  color: #e0b15c;
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+}
+
+.hero h1,
+.panel h2 {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  line-height: 0.95;
+  margin: 0;
+}
+
+.lede {
+  color: rgba(248, 243, 232, 0.78);
+  max-width: 52rem;
+}
+
+.panel {
+  backdrop-filter: blur(18px);
+  background: rgba(42, 23, 18, 0.72);
+  border: 1px solid rgba(248, 243, 232, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  padding: 1.25rem;
+}
+
+.join-form,
+.grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.join-form {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: 1rem;
+}
+
+.join-form label {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.status-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  margin: 1rem 0;
+}
+
+.facts {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+}
+
+.facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.facts dt {
+  color: rgba(248, 243, 232, 0.65);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.player-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.player-list li {
+  align-items: center;
+  background: rgba(248, 243, 232, 0.05);
+  border-radius: 16px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding-top: 2rem;
+  }
+}

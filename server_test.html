@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Secret Hitler Server Test</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5efe4;
+        --panel: #fffaf2;
+        --ink: #241a14;
+        --accent: #9d2b25;
+        --accent-2: #184b73;
+        --border: #d7c7b4;
+        --muted: #6c5a4e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at top left, #fff8ed, transparent 30%),
+          linear-gradient(180deg, #f8f2e8 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+        display: grid;
+        gap: 16px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 8px;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 24px rgba(36, 26, 20, 0.08);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+
+      .status {
+        font-weight: 700;
+      }
+
+      .next-step {
+        color: var(--muted);
+        margin-top: 6px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      input,
+      button {
+        font: inherit;
+      }
+
+      input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #fff;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 14px;
+        color: white;
+        cursor: pointer;
+        background: var(--accent);
+      }
+
+      button.secondary {
+        background: var(--accent-2);
+      }
+
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .callout {
+        padding: 12px;
+        border-radius: 12px;
+        background: #fff;
+        border: 1px solid var(--border);
+        white-space: pre-wrap;
+      }
+
+      .facts {
+        display: grid;
+        gap: 10px;
+      }
+
+      .facts-row {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 10px;
+      }
+
+      .facts-row dt {
+        font-weight: 700;
+      }
+
+      .players {
+        display: grid;
+        gap: 10px;
+      }
+
+      .player-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #fff;
+      }
+
+      .player-card.is-self {
+        border-color: var(--accent-2);
+        box-shadow: inset 0 0 0 1px var(--accent-2);
+      }
+
+      .player-card.is-president {
+        background: #fff0eb;
+      }
+
+      .player-card.is-chancellor {
+        background: #eef7ff;
+      }
+
+      .player-card.is-dead {
+        opacity: 0.6;
+      }
+
+      .player-topline {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .tag-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        background: #efe5d6;
+      }
+
+      .tag.me {
+        background: #d7ebfb;
+      }
+
+      .tag.president {
+        background: #ffd5ca;
+      }
+
+      .tag.chancellor {
+        background: #dbefff;
+      }
+
+      .tag.host {
+        background: #f3ddac;
+      }
+
+      .tag.offline {
+        background: #ddd;
+      }
+
+      .tag.dead {
+        background: #d9c3c3;
+      }
+
+      .box {
+        min-height: 180px;
+        max-height: 360px;
+        overflow: auto;
+        padding: 12px;
+        border-radius: 12px;
+        background: #fff;
+        border: 1px solid var(--border);
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>Secret Hitler Server Test</h1>
+        <p>
+          Open this file in multiple tabs to simulate multiple players. This page
+          explains the current phase, highlights the current president and chancellor,
+          and tells each tab what action should happen next.
+        </p>
+        <div class="status" id="status">Disconnected</div>
+        <div class="next-step" id="next-step">Connect to the server, then join a room.</div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Connection</h2>
+          <label>
+            WebSocket URL
+            <input id="ws-url" value="ws://localhost:18080/ws" />
+          </label>
+          <label>
+            Room Code
+            <input id="room-code" value="DEMO1" maxlength="5" />
+          </label>
+          <label>
+            Name
+            <input id="player-name" value="Alice" />
+          </label>
+          <label>
+            Player ID
+            <input id="player-id" />
+          </label>
+          <div class="button-row">
+            <button id="connect-btn">Connect</button>
+            <button id="join-btn" class="secondary">Join Room</button>
+            <button id="sync-btn" class="secondary">Sync State</button>
+            <button id="new-id-btn" class="secondary">New Player ID</button>
+            <button id="start-btn">Start Game</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Election Actions</h2>
+          <label>
+            Chancellor Target Player ID
+            <input id="nominee-id" placeholder="p2" />
+          </label>
+          <div class="button-row">
+            <button id="nominate-btn">Nominate</button>
+            <button id="vote-ja-btn" class="secondary">Vote Ja</button>
+            <button id="vote-nein-btn" class="secondary">Vote Nein</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Legislative / Executive</h2>
+          <label>
+            Policy Index
+            <input id="policy-index" type="number" min="0" value="0" />
+          </label>
+          <label>
+            Executive Target Player ID
+            <input id="executive-target-id" placeholder="p3" />
+          </label>
+          <div class="button-row">
+            <button id="president-discard-btn">President Discard</button>
+            <button id="chancellor-enact-btn" class="secondary">Chancellor Enact</button>
+            <button id="investigate-btn">Investigate</button>
+            <button id="special-election-btn" class="secondary">Special Election</button>
+            <button id="execute-btn">Execute</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>What Should Happen Next</h2>
+          <div id="guide" class="callout mono">No room state yet.</div>
+        </div>
+        <div class="panel">
+          <h2>This Tab</h2>
+          <dl class="facts">
+            <div class="facts-row">
+              <dt>Name</dt>
+              <dd id="self-name">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Player ID</dt>
+              <dd id="self-id" class="mono">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Role</dt>
+              <dd id="self-role">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Party</dt>
+              <dd id="self-party">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Known Fascists</dt>
+              <dd id="self-known-fascists">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Legislative Hand</dt>
+              <dd id="self-hand">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Policy Peek</dt>
+              <dd id="self-policy-peek">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Investigation</dt>
+              <dd id="self-investigation">-</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Turn Summary</h2>
+          <dl class="facts">
+            <div class="facts-row">
+              <dt>Phase</dt>
+              <dd id="summary-phase">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Host</dt>
+              <dd id="summary-host">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>President</dt>
+              <dd id="summary-president">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Chancellor</dt>
+              <dd id="summary-chancellor">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Last President</dt>
+              <dd id="summary-last-president">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Last Chancellor</dt>
+              <dd id="summary-last-chancellor">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Election Tracker</dt>
+              <dd id="summary-tracker">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Pending Votes</dt>
+              <dd id="summary-pending-votes">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Pending Power</dt>
+              <dd id="summary-power">-</dd>
+            </div>
+            <div class="facts-row">
+              <dt>Winner</dt>
+              <dd id="summary-winner">-</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="panel">
+          <h2>Players</h2>
+          <div id="players-list" class="players">No players yet.</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Latest Room State</h2>
+          <div id="room-state" class="box mono">{}</div>
+        </div>
+        <div class="panel">
+          <h2>Latest Player View</h2>
+          <div id="player-view" class="box mono">{}</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Message Log</h2>
+        <div id="log" class="box mono"></div>
+      </section>
+    </main>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const nextStepEl = document.getElementById("next-step");
+      const guideEl = document.getElementById("guide");
+      const logEl = document.getElementById("log");
+      const roomStateEl = document.getElementById("room-state");
+      const playerViewEl = document.getElementById("player-view");
+      const playersListEl = document.getElementById("players-list");
+
+      const wsUrlInput = document.getElementById("ws-url");
+      const roomCodeInput = document.getElementById("room-code");
+      const playerNameInput = document.getElementById("player-name");
+      const playerIdInput = document.getElementById("player-id");
+      const nomineeIdInput = document.getElementById("nominee-id");
+      const executiveTargetIdInput = document.getElementById("executive-target-id");
+      const policyIndexInput = document.getElementById("policy-index");
+
+      const summaryPhaseEl = document.getElementById("summary-phase");
+      const summaryHostEl = document.getElementById("summary-host");
+      const summaryPresidentEl = document.getElementById("summary-president");
+      const summaryChancellorEl = document.getElementById("summary-chancellor");
+      const summaryLastPresidentEl = document.getElementById("summary-last-president");
+      const summaryLastChancellorEl = document.getElementById("summary-last-chancellor");
+      const summaryTrackerEl = document.getElementById("summary-tracker");
+      const summaryPendingVotesEl = document.getElementById("summary-pending-votes");
+      const summaryPowerEl = document.getElementById("summary-power");
+      const summaryWinnerEl = document.getElementById("summary-winner");
+
+      const selfNameEl = document.getElementById("self-name");
+      const selfIdEl = document.getElementById("self-id");
+      const selfRoleEl = document.getElementById("self-role");
+      const selfPartyEl = document.getElementById("self-party");
+      const selfKnownFascistsEl = document.getElementById("self-known-fascists");
+      const selfHandEl = document.getElementById("self-hand");
+      const selfPolicyPeekEl = document.getElementById("self-policy-peek");
+      const selfInvestigationEl = document.getElementById("self-investigation");
+
+      let socket = null;
+      let latestRoomState = null;
+      let latestPlayerView = null;
+
+      function nextSimplePlayerId() {
+        const usedIds = new Set();
+
+        if (latestRoomState?.players) {
+          for (const player of latestRoomState.players) {
+            usedIds.add(player.id);
+          }
+        }
+
+        for (let index = 1; index <= 10; ++index) {
+          const candidate = `p${index}`;
+          if (!usedIds.has(candidate)) {
+            return candidate;
+          }
+        }
+
+        return `p${Date.now()}`;
+      }
+
+      if (!playerIdInput.value) {
+        playerIdInput.value = "p1";
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function setNextStep(text) {
+        nextStepEl.textContent = text;
+      }
+
+      function appendLog(title, payload) {
+        const stamp = new Date().toLocaleTimeString();
+        const line = `[${stamp}] ${title}\n${JSON.stringify(payload, null, 2)}\n\n`;
+        logEl.textContent = line + logEl.textContent;
+      }
+
+      function renderJson(element, value) {
+        element.textContent = JSON.stringify(value ?? {}, null, 2);
+      }
+
+      function nameForPlayerId(playerId) {
+        if (!playerId) {
+          return "-";
+        }
+        if (!latestRoomState) {
+          return playerId;
+        }
+        const player = latestRoomState.players.find((entry) => entry.id === playerId);
+        return player ? `${player.name} (${player.id})` : playerId;
+      }
+
+      function renderSummary() {
+        if (!latestRoomState) {
+          return;
+        }
+
+        summaryPhaseEl.textContent = latestRoomState.phase || "-";
+        summaryHostEl.textContent = nameForPlayerId(latestRoomState.hostPlayerId);
+        summaryPresidentEl.textContent = nameForPlayerId(latestRoomState.presidentId);
+        summaryChancellorEl.textContent = nameForPlayerId(latestRoomState.chancellorId);
+        summaryLastPresidentEl.textContent = nameForPlayerId(latestRoomState.lastPresidentId);
+        summaryLastChancellorEl.textContent = nameForPlayerId(latestRoomState.lastChancellorId);
+        summaryTrackerEl.textContent = String(latestRoomState.electionTracker ?? 0);
+        summaryPendingVotesEl.textContent = String(latestRoomState.pendingVotes ?? 0);
+        summaryPowerEl.textContent = latestRoomState.pendingExecutivePower || "-";
+        summaryWinnerEl.textContent = latestRoomState.winner || "-";
+      }
+
+      function renderPlayerViewSummary() {
+        if (!latestPlayerView) {
+          selfNameEl.textContent = playerNameInput.value || "-";
+          selfIdEl.textContent = playerIdInput.value || "-";
+          selfRoleEl.textContent = "-";
+          selfPartyEl.textContent = "-";
+          selfKnownFascistsEl.textContent = "-";
+          selfHandEl.textContent = "-";
+          selfPolicyPeekEl.textContent = "-";
+          selfInvestigationEl.textContent = "-";
+          return;
+        }
+
+        selfNameEl.textContent = latestPlayerView.playerName || "-";
+        selfIdEl.textContent = latestPlayerView.playerId || "-";
+        selfRoleEl.textContent = latestPlayerView.role || "-";
+        selfPartyEl.textContent = latestPlayerView.party || "-";
+        selfKnownFascistsEl.textContent = latestPlayerView.knownFascists?.length
+          ? latestPlayerView.knownFascists.map(nameForPlayerId).join(", ")
+          : "none";
+        selfHandEl.textContent = latestPlayerView.legislativeHand?.length
+          ? latestPlayerView.legislativeHand.join(", ")
+          : "none";
+        selfPolicyPeekEl.textContent = latestPlayerView.policyPeek?.length
+          ? latestPlayerView.policyPeek.join(", ")
+          : "none";
+        selfInvestigationEl.textContent = latestPlayerView.investigationResult || "none";
+      }
+
+      function renderPlayersList() {
+        if (!latestRoomState) {
+          playersListEl.textContent = "No players yet.";
+          return;
+        }
+
+        const myId = playerIdInput.value;
+        playersListEl.innerHTML = "";
+
+        for (const player of latestRoomState.players) {
+          const card = document.createElement("div");
+          card.className = "player-card";
+
+          if (player.id === myId) {
+            card.classList.add("is-self");
+          }
+          if (player.id === latestRoomState.presidentId) {
+            card.classList.add("is-president");
+          }
+          if (player.id === latestRoomState.chancellorId) {
+            card.classList.add("is-chancellor");
+          }
+          if (!player.alive) {
+            card.classList.add("is-dead");
+          }
+
+          const top = document.createElement("div");
+          top.className = "player-topline";
+          top.innerHTML = `<strong>${player.name}</strong><span class="mono">${player.id}</span>`;
+
+          const tags = document.createElement("div");
+          tags.className = "tag-row";
+
+          function addTag(label, className = "") {
+            const tag = document.createElement("span");
+            tag.className = `tag ${className}`.trim();
+            tag.textContent = label;
+            tags.appendChild(tag);
+          }
+
+          if (player.id === myId) addTag("you", "me");
+          if (player.id === latestRoomState.hostPlayerId) addTag("host", "host");
+          if (player.id === latestRoomState.presidentId) addTag("president", "president");
+          if (player.id === latestRoomState.chancellorId) addTag("chancellor", "chancellor");
+          if (!player.connected) addTag("offline", "offline");
+          if (!player.alive) addTag("dead", "dead");
+
+          card.appendChild(top);
+          card.appendChild(tags);
+          playersListEl.appendChild(card);
+        }
+      }
+
+      function buildGuide() {
+        if (!latestRoomState) {
+          guideEl.textContent = "No room state yet.";
+          return;
+        }
+
+        const myId = playerIdInput.value;
+        const isHost = latestRoomState.hostPlayerId === myId;
+        const amPresident = latestRoomState.presidentId === myId;
+        const amChancellor = latestRoomState.chancellorId === myId;
+
+        const lines = [
+          `Phase: ${latestRoomState.phase}`,
+          `Host: ${nameForPlayerId(latestRoomState.hostPlayerId)}`,
+          `President: ${nameForPlayerId(latestRoomState.presidentId)}`,
+          `Chancellor/Nominee: ${nameForPlayerId(latestRoomState.chancellorId)}`,
+          ""
+        ];
+
+        let nextAction = "Wait for the next server update.";
+
+        if (latestRoomState.phase === "lobby") {
+          nextAction = isHost
+            ? "When 5 to 10 players have joined, click Start Game."
+            : "Wait for the host to click Start Game.";
+        } else if (
+          latestRoomState.phase === "election" &&
+          latestRoomState.chancellorId &&
+          latestRoomState.chancellorId !== ""
+        ) {
+          nextAction = "A chancellor has been nominated. Every living player should vote Ja or Nein now.";
+        } else if (latestRoomState.phase === "election" && amPresident) {
+          nextAction = "You are the president. Enter a target player id and click Nominate.";
+        } else if (latestRoomState.phase === "election") {
+          nextAction = "Wait for the president to nominate a chancellor.";
+        } else if (
+          latestRoomState.phase === "legislative_session" &&
+          (latestRoomState.presidentHandSize ?? 0) === 3
+        ) {
+          nextAction = amPresident
+            ? "You are the president. Pick policy index 0, 1, or 2 and click President Discard."
+            : "Wait for the president to discard one policy.";
+        } else if (
+          latestRoomState.phase === "legislative_session" &&
+          (latestRoomState.chancellorHandSize ?? 0) === 2
+        ) {
+          nextAction = amChancellor
+            ? "You are the chancellor. Pick policy index 0 or 1 and click Chancellor Enact."
+            : "Wait for the chancellor to enact one policy.";
+        } else if (latestRoomState.phase === "executive_action") {
+          nextAction = amPresident
+            ? `You are the president. Resolve executive power: ${latestRoomState.pendingExecutivePower}.`
+            : `Wait for the president to resolve executive power: ${latestRoomState.pendingExecutivePower}.`;
+        } else if (latestRoomState.phase === "complete") {
+          nextAction = `Game over. Winner: ${latestRoomState.winner || "unknown"}.`;
+        }
+
+        lines.push(`Next action: ${nextAction}`);
+        lines.push(`Election tracker: ${latestRoomState.electionTracker ?? 0}`);
+        lines.push(`Pending votes: ${latestRoomState.pendingVotes ?? 0}`);
+        lines.push(`Pending executive power: ${latestRoomState.pendingExecutivePower || "none"}`);
+
+        guideEl.textContent = lines.join("\n");
+        setStatus(
+          `Phase ${latestRoomState.phase} | President ${nameForPlayerId(latestRoomState.presidentId)} | Chancellor ${nameForPlayerId(latestRoomState.chancellorId)}`
+        );
+        setNextStep(nextAction);
+      }
+
+      function handleMessage(message) {
+        appendLog(message.type || "message", message);
+
+        if (message.type === "room_state") {
+          latestRoomState = message.payload;
+          renderJson(roomStateEl, latestRoomState);
+          renderSummary();
+          renderPlayersList();
+          buildGuide();
+          return;
+        }
+
+        if (message.type === "player_view") {
+          latestPlayerView = message.payload;
+          renderJson(playerViewEl, latestPlayerView);
+          renderPlayerViewSummary();
+          return;
+        }
+
+        if (message.type === "error") {
+          setStatus(`Server error: ${message.message}`);
+          setNextStep("Fix the error, then try again.");
+        }
+      }
+
+      function connect() {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          setStatus("Already connected");
+          return;
+        }
+
+        socket = new WebSocket(wsUrlInput.value);
+        socket.onopen = () => {
+          setStatus("Connected");
+          setNextStep("Click Join Room to attach this tab to a game room.");
+        };
+        socket.onclose = () => {
+          setStatus("Disconnected");
+          setNextStep("Reconnect to continue testing.");
+        };
+        socket.onerror = () => {
+          setStatus("Socket error");
+          setNextStep("Check that the server is running and the WebSocket URL is correct.");
+        };
+        socket.onmessage = (event) => handleMessage(JSON.parse(event.data));
+      }
+
+      function send(payload) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+          setStatus("Socket not ready");
+          setNextStep("Connect first.");
+          return;
+        }
+
+        appendLog("client_send", payload);
+        socket.send(JSON.stringify(payload));
+      }
+
+      document.getElementById("connect-btn").addEventListener("click", connect);
+      document.getElementById("join-btn").addEventListener("click", () => {
+        send({
+          type: "join_room",
+          roomCode: roomCodeInput.value.toUpperCase(),
+          playerId: playerIdInput.value,
+          name: playerNameInput.value || "Anonymous"
+        });
+      });
+      document.getElementById("sync-btn").addEventListener("click", () => {
+        send({ type: "sync_state" });
+      });
+      document.getElementById("new-id-btn").addEventListener("click", () => {
+        playerIdInput.value = nextSimplePlayerId();
+        latestPlayerView = null;
+        renderPlayerViewSummary();
+        setNextStep("New player id generated. Join a room with this identity.");
+      });
+      document.getElementById("start-btn").addEventListener("click", () => {
+        send({ type: "start_game" });
+      });
+      document.getElementById("nominate-btn").addEventListener("click", () => {
+        send({
+          type: "nominate_chancellor",
+          targetPlayerId: nomineeIdInput.value
+        });
+      });
+      document.getElementById("vote-ja-btn").addEventListener("click", () => {
+        send({ type: "cast_vote", vote: "ja" });
+      });
+      document.getElementById("vote-nein-btn").addEventListener("click", () => {
+        send({ type: "cast_vote", vote: "nein" });
+      });
+      document.getElementById("president-discard-btn").addEventListener("click", () => {
+        send({
+          type: "president_discard_policy",
+          index: Number(policyIndexInput.value)
+        });
+      });
+      document.getElementById("chancellor-enact-btn").addEventListener("click", () => {
+        send({
+          type: "chancellor_enact_policy",
+          index: Number(policyIndexInput.value)
+        });
+      });
+      document.getElementById("investigate-btn").addEventListener("click", () => {
+        send({
+          type: "investigate_player",
+          targetPlayerId: executiveTargetIdInput.value
+        });
+      });
+      document.getElementById("special-election-btn").addEventListener("click", () => {
+        send({
+          type: "call_special_election",
+          targetPlayerId: executiveTargetIdInput.value
+        });
+      });
+      document.getElementById("execute-btn").addEventListener("click", () => {
+        send({
+          type: "execute_player",
+          targetPlayerId: executiveTargetIdInput.value
+        });
+      });
+
+      renderPlayerViewSummary();
+    </script>
+  </body>
+</html>

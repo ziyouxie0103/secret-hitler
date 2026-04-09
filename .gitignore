@@ -1,0 +1,13 @@
+.DS_Store
+
+# CMake / native build outputs
+build/
+cmake-build-*/
+CMakeUserPresets.json
+
+# Node / frontend local deps and outputs
+client/node_modules/
+client/dist/
+
+# IDE files
+.vscode/*.log
