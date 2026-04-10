@@ -162,55 +162,30 @@ export default function App() {
     () => roomState.players.map((player) => `${player.id}:${player.alive ? 1 : 0}`).join("|"),
     [roomState.players],
   );
-  const [debugLogs, setDebugLogs] = useState<string[]>([]);
-  const log = (msg: string) => {
-    console.log(msg);
-    setDebugLogs(prev => [...prev, msg]);
-  };
-
+  
   useEffect(() => {
     let wsUrl = import.meta.env.VITE_WS_URL;
-
-    log("ENV WS URL: " + wsUrl);
 
     // If no environment variable, fallback to localhost
     if (!wsUrl) {
       wsUrl = "ws://localhost:18080/ws";
-      log("Using fallback localhost");
     }
 
     // Security: If the page is HTTPS, the socket MUST be WSS
     if (window.location.protocol === "https:" && wsUrl.startsWith("ws:")) {
       wsUrl = wsUrl.replace("ws:", "wss:");
-      log("Upgraded to WSS: " + wsUrl);
     }
-
-    log("FINAL WS URL: " + wsUrl);
 
     const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
-    log("Creating WebSocket...");
-
-    socket.onopen = () => {
-      log("WS OPEN");
-      setStatus("Connected to server");
-    };
-
-    socket.onclose = (e) => {
-      log("WS CLOSED: " + e.code);
+    socket.onopen = () => setStatus("Connected to server");
+    socket.onclose = () => {
       setJoined(false);
       setStatus("Disconnected");
     };
-
-    socket.onerror = (e) => {
-      log("WS ERROR");
-      setStatus("Connection error");
-    };
-
+    socket.onerror = () => setStatus("Connection error");
     socket.onmessage = (event) => {
-      log("WS MESSAGE RECEIVED");
-
       const message = JSON.parse(event.data) as ServerMessage;
 
       if (message.type === "joined_room") {
@@ -251,70 +226,6 @@ export default function App() {
 
     return () => socket.close();
   }, []);
-
-  // useEffect(() => {
-  //   let wsUrl = import.meta.env.VITE_WS_URL;
-
-  //   // If no environment variable, fallback to localhost
-  //   if (!wsUrl) {
-  //     wsUrl = "ws://localhost:18080/ws";
-  //   }
-
-  //   // Security: If the page is HTTPS, the socket MUST be WSS
-  //   if (window.location.protocol === "https:" && wsUrl.startsWith("ws:")) {
-  //     wsUrl = wsUrl.replace("ws:", "wss:");
-  //   }
-
-  //   const socket = new WebSocket(wsUrl);
-  //   socketRef.current = socket;
-
-  //   socket.onopen = () => setStatus("Connected to server");
-  //   socket.onclose = () => {
-  //     setJoined(false);
-  //     setStatus("Disconnected");
-  //   };
-  //   socket.onerror = () => setStatus("Connection error");
-  //   socket.onmessage = (event) => {
-  //     const message = JSON.parse(event.data) as ServerMessage;
-
-  //     if (message.type === "joined_room") {
-  //       setJoined(true);
-  //       if (message.payload?.playerId) {
-  //         setPlayerId(message.payload.playerId);
-  //         localStorage.setItem("secret-hitler-player-id", message.payload.playerId);
-  //       }
-  //       setStatus(`In room ${message.payload?.roomCode ?? roomCode}`);
-  //       return;
-  //     }
-
-  //     if (message.type === "room_state" && message.payload) {
-  //       setRoomState(message.payload);
-  //       if (syncPending) {
-  //         setStatus(`State synced for room ${message.payload.roomCode}`);
-  //         setSyncPending(false);
-  //       } else {
-  //         setStatus(`In room ${message.payload.roomCode}`);
-  //       }
-  //       return;
-  //     }
-
-  //     if (message.type === "player_view" && message.payload) {
-  //       setPlayerView(message.payload);
-  //       return;
-  //     }
-
-  //     if (message.type === "sync_ack") {
-  //       setStatus("Refreshing room state...");
-  //       return;
-  //     }
-
-  //     if (message.type === "error") {
-  //       setStatus(`Server error: ${message.message ?? "unknown"}`);
-  //     }
-  //   };
-
-  //   return () => socket.close();
-  // }, []);
 
   useEffect(() => {
     if (!joined) {
@@ -1015,23 +926,6 @@ export default function App() {
 
       </section>
       )}
-      <div style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        maxHeight: "200px",
-        overflowY: "auto",
-        background: "black",
-        color: "lime",
-        fontSize: "12px",
-        padding: "5px",
-        zIndex: 9999
-      }}>
-        {debugLogs.map((log, i) => (
-          <div key={i}>{log}</div>
-        ))}
-      </div>
     </main>
   );
 }
