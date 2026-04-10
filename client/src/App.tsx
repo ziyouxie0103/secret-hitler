@@ -58,7 +58,7 @@ type RoundLogEntry = {
 type EventKind = "policy" | "execution" | "winner" | "";
 
 const defaultRoomState: RoomState = {
-  roomCode: "DEMO1",
+  roomCode: "room1",
   phase: "lobby",
   players: [],
   liberalPolicies: 0,
@@ -136,7 +136,7 @@ function renderPolicyText(text: string): React.ReactNode {
 
 export default function App() {
   const socketRef = useRef<WebSocket | null>(null);
-  const [roomCode, setRoomCode] = useState("DEMO1");
+  const [roomCode, setRoomCode] = useState("room1");
   const [name, setName] = useState(() => localStorage.getItem("secret-hitler-player-name") ?? "");
   const [nomineeId, setNomineeId] = useState("");
   const [executiveTargetId, setExecutiveTargetId] = useState("");
@@ -148,7 +148,9 @@ export default function App() {
   const [eventNotice, setEventNotice] = useState<string | React.ReactNode>("");
   const [eventKind, setEventKind] = useState<EventKind>("");
   const [noticeKey, setNoticeKey] = useState(0);
+  const [interactionOpen, setInteractionOpen] = useState(false);
   const previousPolicyCountsRef = useRef({ liberal: 0, fascist: 0 });
+  const prevActionType = useRef<string | null>(null);
   const previousPlayersRef = useRef<Record<string, boolean>>({});
   const previousWinnerRef = useRef("");
   const [roundLog, setRoundLog] = useState<RoundLogEntry[]>([]);
@@ -157,7 +159,6 @@ export default function App() {
   const [voteLocked, setVoteLocked] = useState(false);
   const [selectedPolicyIndex, setSelectedPolicyIndex] = useState<number | null>(null);
   const [policyLocked, setPolicyLocked] = useState(false);
-  const [syncPending, setSyncPending] = useState(false);
   const aliveSignature = useMemo(
     () => roomState.players.map((player) => `${player.id}:${player.alive ? 1 : 0}`).join("|"),
     [roomState.players],
@@ -199,13 +200,15 @@ export default function App() {
       }
 
       if (message.type === "room_state" && message.payload) {
-        setRoomState(message.payload);
-        if (syncPending) {
-          setStatus(`State synced for room ${message.payload.roomCode}`);
-          setSyncPending(false);
-        } else {
-          setStatus(`In room ${message.payload.roomCode}`);
+        const nextRoomState = message.payload;
+        setStatus(`In room ${nextRoomState.roomCode}`);
+
+        // Clear selection if hand sizes indicate the turn has moved on
+        if (nextRoomState.presidentHandSize === 0 && nextRoomState.chancellorHandSize === 0) {
+           setSelectedPolicyIndex(null);
         }
+
+        setRoomState(nextRoomState);
         return;
       }
 
@@ -341,16 +344,49 @@ export default function App() {
     joined &&
     isPresident &&
     roomState.phase === "legislative_session" &&
-    (playerView?.legislativeHand.length ?? 0) === 3;
+    (playerView?.legislativeHand.length ?? 0) === 3 &&
+    roomState.presidentHandSize === 3;
   const canChancellorEnact =
     joined &&
     isChancellor &&
     roomState.phase === "legislative_session" &&
-    (playerView?.legislativeHand.length ?? 0) === 2;
+    (playerView?.legislativeHand.length ?? 0) === 2 &&
+    roomState.chancellorHandSize === 2;
   const canResolveExecutive = joined && isPresident && roomState.phase === "executive_action";
   const showPrivateRole = roomState.phase !== "lobby" && playerView?.role;
   const showPrivateParty = roomState.phase !== "lobby" && playerView?.party;
   const isDead = currentPlayer?.alive === false;
+
+  const requiredActionType = useMemo(() => {
+    if (canNominate) return "nominate";
+    if (canVote && !voteLocked) return "vote";
+    if (canPresidentDiscard && !policyLocked) return "discard";
+    if (canChancellorEnact && !policyLocked) return "enact";
+    if (canResolveExecutive) return "executive";
+    return null;
+  }, [canNominate, canVote, voteLocked, canPresidentDiscard, canChancellorEnact, policyLocked, canResolveExecutive]);
+
+  const isActionRequired = requiredActionType !== null;
+
+  // Automatically open interaction modal when it becomes the user's turn
+  useEffect(() => {
+    if (requiredActionType && requiredActionType !== prevActionType.current) {
+      // Add a 2-second delay before popping up the action window.
+      // This gives players time to see policy enactments or execution notices first.
+      const timer = setTimeout(() => {
+        setInteractionOpen(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (!requiredActionType) {
+      setInteractionOpen(false);
+    }
+    prevActionType.current = requiredActionType;
+  }, [requiredActionType]);
+
+  const { totalF, totalL } = useMemo(() => {
+    const f = roomState.players.length > 0 ? Math.ceil(roomState.players.length / 2) - 1 : 0;
+    return { totalF: f, totalL: roomState.players.length - f };
+  }, [roomState.players.length]);
 
   useEffect(() => {
     if (!canVote) {
@@ -462,12 +498,6 @@ export default function App() {
     sendMessage({ type: "start_game" });
   }
 
-  function syncState() {
-    setSyncPending(true);
-    setStatus("Refreshing room state...");
-    sendMessage({ type: "sync_state" });
-  }
-
   function nominateChancellor() {
     if (!nomineeId.trim()) {
       setStatus("Enter a player id to nominate");
@@ -478,6 +508,7 @@ export default function App() {
       type: "nominate_chancellor",
       targetPlayerId: nomineeId.trim(),
     });
+    setInteractionOpen(false);
   }
 
   function castVote(vote: "ja" | "nein") {
@@ -495,6 +526,7 @@ export default function App() {
 
     castVote(selectedVote);
     setVoteLocked(true);
+    setInteractionOpen(false);
   }
 
   function presidentDiscard(index: number) {
@@ -520,12 +552,16 @@ export default function App() {
     if (canPresidentDiscard) {
       presidentDiscard(selectedPolicyIndex);
       setPolicyLocked(true);
+      setInteractionOpen(false);
+      setSelectedPolicyIndex(null);
       return;
     }
 
     if (canChancellorEnact) {
       chancellorEnact(selectedPolicyIndex);
       setPolicyLocked(true);
+      setInteractionOpen(false);
+      setSelectedPolicyIndex(null);
     }
   }
 
@@ -539,6 +575,7 @@ export default function App() {
       type,
       targetPlayerId: executiveTargetId.trim(),
     });
+    setInteractionOpen(false);
   }
 
   return (
@@ -556,26 +593,138 @@ export default function App() {
       )}
 
       {joined && eventNotice && (
-        <section key={noticeKey} className="notice-overlay">
-          <div className="panel notice-modal">
-            <p className="notice-kicker">
-              {eventKind === "winner"
-                ? "Game Over"
-                : eventKind === "execution"
-                  ? "Execution"
-                  : "Policy Enacted"}
-            </p>
-            <strong>{eventNotice}</strong>
+        <div key={noticeKey} className="event-banner-container">
+          <div className="event-banner">
+            <div className="event-banner-content">
+              <p className="notice-kicker" style={{ fontSize: '0.7rem', marginBottom: '0' }}>
+                {eventKind === "winner" ? "Game Over" : eventKind === "execution" ? "Execution" : "Policy Enacted"}
+              </p>
+              <span className="event-banner-text">{eventNotice}</span>
+            </div>
             <button
               type="button"
               className="secondary"
+              style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}
               onClick={() => {
                 setEventNotice("");
                 setEventKind("");
               }}
             >
-              Continue
+              OK
             </button>
+          </div>
+        </div>
+      )}
+
+      {joined && interactionOpen && isActionRequired && (
+        <section className="notice-overlay">
+          <div className="panel notice-modal">
+            <div className="action-modal-content">
+              {canNominate && (
+                <div className="action-group">
+                  <h3>Nominate Chancellor</h3>
+                  <label>
+                    <input
+                      value={nomineeId}
+                      onChange={(event) => setNomineeId(event.target.value)}
+                      placeholder="Player ID"
+                    />
+                  </label>
+                  <div className="button-row compact-row">
+                    <button 
+                      type="button" 
+                      className="primary-action-btn" 
+                      onClick={nominateChancellor}
+                    >
+                      Confirm Nomination
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {canVote && (
+                <div className="action-group">
+                  <h3>Cast Your Vote</h3>
+                  <p className="helper">Nominee: {displayPlayer(roomState.chancellorId)}</p>
+                  <div className="button-row compact-row">
+                    <button
+                      type="button"
+                      className={selectedVote === "ja" ? "selected" : "secondary"}
+                      onClick={() => setSelectedVote("ja")}
+                      disabled={voteLocked}
+                    >
+                      Ja!
+                    </button>
+                    <button
+                      type="button"
+                      className={selectedVote === "nein" ? "selected danger" : "secondary"}
+                      onClick={() => setSelectedVote("nein")}
+                      disabled={voteLocked}
+                    >
+                      Nein!
+                    </button>
+                  </div>
+                  <button 
+                    type="button" 
+                    className="primary-action-btn"
+                    onClick={confirmVote} 
+                    disabled={voteLocked || !selectedVote}
+                  >
+                    {voteLocked ? "Vote Locked" : "Confirm Vote"}
+                  </button>
+                </div>
+              )}
+
+              {(canPresidentDiscard || canChancellorEnact) && (
+                <div className="action-group">
+                  <h3>{canPresidentDiscard ? "President: Discard a Policy" : "Chancellor: Enact a Policy"}</h3>
+                  <div className="card-row">
+                    {(playerView?.legislativeHand ?? []).map((policy, index) => (
+                      <button
+                        key={`${policy}-${index}`}
+                        type="button"
+                        className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
+                        onClick={() => setSelectedPolicyIndex(index)}
+                        disabled={policyLocked}
+                      >
+                        <PolicyLabel policy={policy} />
+                      </button>
+                    ))}
+                  </div>
+                  <button 
+                    type="button" 
+                    className="primary-action-btn"
+                    onClick={confirmPolicyAction} 
+                    disabled={policyLocked || selectedPolicyIndex === null}
+                  >
+                    {policyLocked ? "Action Confirmed" : "Confirm Choice"}
+                  </button>
+                </div>
+              )}
+
+              {canResolveExecutive && (
+                <div className="action-group">
+                  <h3>{formatLabel(roomState.pendingExecutivePower)}</h3>
+                  <input
+                    value={executiveTargetId}
+                    onChange={(event) => setExecutiveTargetId(event.target.value)}
+                    placeholder="Target Player ID"
+                  />
+                  <div className="button-row compact-row">
+                    <button 
+                      type="button" 
+                      className={roomState.pendingExecutivePower === "execution" ? "danger" : ""}
+                      onClick={() => resolveExecutive(
+                        roomState.pendingExecutivePower === "investigate_loyalty" ? "investigate_player" : 
+                        roomState.pendingExecutivePower === "special_election" ? "call_special_election" : "execute_player"
+                      )}
+                    >
+                      Execute Power
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
@@ -619,9 +768,6 @@ export default function App() {
             <p>{isHost ? "Start when 5 to 10 players are here." : "Waiting for the host to start the game."}</p>
           </div>
           <div className="button-row">
-            <button type="button" className="secondary" onClick={syncState} disabled={!socketReady}>
-              Sync State
-            </button>
             <button type="button" onClick={startGame} disabled={!canStart}>
               Start Game
             </button>
@@ -632,120 +778,6 @@ export default function App() {
       {joined && (
       <section className="stack-layout">
         <section className="top-row">
-          <article className="panel action-panel">
-            {canNominate && (
-              <div className="action-group">
-                <h3>Nominate Chancellor</h3>
-                <label>
-                  Chancellor target player id
-                  <input
-                    value={nomineeId}
-                    onChange={(event) => setNomineeId(event.target.value)}
-                    placeholder="p2"
-                  />
-                </label>
-                <div className="button-row compact-row">
-                  <button type="button" onClick={nominateChancellor}>
-                    Nominate Chancellor
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {canVote && (
-              <div className="action-group">
-                <h3>Cast Vote</h3>
-                <div className="button-row compact-row">
-                  <button
-                    type="button"
-                    className={selectedVote === "ja" ? "selected" : "secondary"}
-                    onClick={() => setSelectedVote("ja")}
-                    disabled={voteLocked}
-                  >
-                    Vote Ja
-                  </button>
-                  <button
-                    type="button"
-                    className={selectedVote === "nein" ? "selected danger" : "secondary"}
-                    onClick={() => setSelectedVote("nein")}
-                    disabled={voteLocked}
-                  >
-                    Vote Nein
-                  </button>
-                  <button type="button" onClick={confirmVote} disabled={voteLocked || !selectedVote}>
-                    {voteLocked ? "Vote Confirmed" : "Confirm Vote"}
-                  </button>
-                </div>
-                {voteLocked && <p className="helper">Your vote is locked in for this election.</p>}
-              </div>
-            )}
-
-            {(canPresidentDiscard || canChancellorEnact) && (
-              <div className="action-group">
-                <h3>{canPresidentDiscard ? "President Discard" : "Chancellor Enact"}</h3>
-                <div className="card-row">
-                  {(playerView?.legislativeHand ?? []).map((policy, index) => (
-                    <button
-                      key={`${policy}-${index}`}
-                      type="button"
-                      className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
-                      onClick={() => setSelectedPolicyIndex(index)}
-                      disabled={policyLocked}
-                  >
-                    <PolicyLabel policy={policy} />
-                  </button>
-                ))}
-              </div>
-                <div className="button-row compact-row">
-                  <button type="button" onClick={confirmPolicyAction} disabled={policyLocked || selectedPolicyIndex === null}>
-                    {policyLocked
-                      ? canPresidentDiscard
-                        ? "Discard Confirmed"
-                        : "Enactment Confirmed"
-                      : canPresidentDiscard
-                        ? "Confirm Discard"
-                        : "Confirm Enactment"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {canResolveExecutive && (
-              <div className="action-group">
-                <h3>{formatLabel(roomState.pendingExecutivePower)}</h3>
-                <label>
-                  Executive target player id
-                  <input
-                    value={executiveTargetId}
-                    onChange={(event) => setExecutiveTargetId(event.target.value)}
-                    placeholder="p3"
-                  />
-                </label>
-                <div className="button-row compact-row">
-                  {roomState.pendingExecutivePower === "investigate_loyalty" && (
-                    <button type="button" onClick={() => resolveExecutive("investigate_player")}>
-                      Investigate Loyalty
-                    </button>
-                  )}
-                  {roomState.pendingExecutivePower === "special_election" && (
-                    <button type="button" className="secondary" onClick={() => resolveExecutive("call_special_election")}>
-                      Call Special Election
-                    </button>
-                  )}
-                  {roomState.pendingExecutivePower === "execution" && (
-                    <button type="button" className="danger" onClick={() => resolveExecutive("execute_player")}>
-                      Execute Player
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {!canNominate && !canVote && !canPresidentDiscard && !canChancellorEnact && !canResolveExecutive && (
-              <p className="helper">No actions available for you right now.</p>
-            )}
-          </article>
-
           <article className={`panel compact-panel private-panel ${privateOpen ? "is-open" : ""}`}>
             <button
               type="button"
@@ -810,8 +842,57 @@ export default function App() {
           </article>
         </section>
 
+        <article className="panel compact-panel board-panel">
+          <div className="board-grid">
+            <div className="board-tile wide">
+              <div className="policy-track">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div 
+                    key={i} 
+                    className={`track-slot ${i < roomState.liberalPolicies ? 'filled liberal' : ''}`}
+                  >
+                    {i < roomState.liberalPolicies ? 'L' : ''}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="board-tile wide">
+              <div className="policy-track">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div 
+                    key={i} 
+                    className={`track-slot ${i < roomState.fascistPolicies ? 'filled fascist' : ''}`}
+                  >
+                    {i < roomState.fascistPolicies ? 'F' : ''}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <article className="board-tile">
+              <span>Unenacted</span>
+              <div className="unenacted-row">
+                <strong className="liberal-text">{6 - roomState.liberalPolicies}</strong>
+                <strong className="fascist-text">{11 - roomState.fascistPolicies}</strong>
+              </div>
+            </article>
+            <div className="board-tile">
+              <span>Failed</span>
+              <strong>{roomState.electionTracker}</strong>
+            </div>
+            <div className="board-tile">
+              <span>Votes</span>
+              <strong>{roomState.pendingVotes}</strong>
+            </div>
+          </div>
+        </article>
+
         <article className="panel compact-panel players-panel">
-          <h2>Players</h2>
+          <div className="players-header">
+            <div className="unenacted-row">
+              <span className="liberal-text">L: {totalL}</span>
+              <span className="fascist-text">F: {totalF}</span>
+            </div>
+          </div>
           <ul className="player-grid">
             {roomState.players.map((player) => {
               const tags = [
@@ -836,7 +917,7 @@ export default function App() {
                 >
                   <div className="player-heading">
                     <strong>{player.name}</strong>
-                    <span className="player-id">{player.id}</span>
+                    <span className="player-id">({player.id})</span>
                   </div>
                   <div className="tag-row">
                     {tags.map((tag) => (
@@ -849,44 +930,6 @@ export default function App() {
               );
             })}
           </ul>
-        </article>
-
-        <article className="panel compact-panel board-panel">
-          <h2>Public Board</h2>
-          <div className="board-grid">
-            <div className="board-tile">
-              <span><PolicyLabel policy="Liberal" /> policies</span>
-              <strong>{roomState.liberalPolicies}</strong>
-            </div>
-            <div className="board-tile">
-              <span><PolicyLabel policy="Fascist" /> policies</span>
-              <strong>{roomState.fascistPolicies}</strong>
-            </div>
-            <div className="board-tile">
-              <span><PolicyLabel policy="Liberal" /> left</span>
-              <strong>{6 - roomState.liberalPolicies}</strong>
-            </div>
-            <div className="board-tile">
-              <span><PolicyLabel policy="Fascist" /> left</span>
-              <strong>{11 - roomState.fascistPolicies}</strong>
-            </div>
-            <div className="board-tile">
-              <span>Draw pile</span>
-              <strong>{roomState.drawPileSize}</strong>
-            </div>
-            <div className="board-tile">
-              <span>Discard pile</span>
-              <strong>{roomState.discardPileSize}</strong>
-            </div>
-            <div className="board-tile">
-              <span>Election tracker</span>
-              <strong>{roomState.electionTracker}</strong>
-            </div>
-            <div className="board-tile">
-              <span>Pending votes</span>
-              <strong>{roomState.pendingVotes}</strong>
-            </div>
-          </div>
         </article>
 
         <article className="panel compact-panel log-panel">

@@ -137,6 +137,46 @@ input {
   z-index: 50;
 }
 
+.event-banner-container {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  width: min(92vw, 480px);
+}
+
+.event-banner {
+  background: rgba(37, 19, 15, 0.96);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(224, 177, 92, 0.4);
+  border-radius: 16px;
+  padding: 0.75rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: toast-in 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.event-banner-content {
+  text-align: left;
+  flex: 1;
+}
+
+.event-banner-text {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+@keyframes toast-in {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 .notice-modal {
   align-items: center;
   display: grid;
@@ -216,8 +256,7 @@ input {
 .top-row {
   align-items: start;
   display: grid;
-  gap: 0.85rem;
-  grid-template-columns: minmax(320px, 1fr) minmax(220px, 0.68fr);
+  justify-content: center;
 }
 
 .facts {
@@ -266,6 +305,13 @@ input {
   height: fit-content;
 }
 
+.players-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
 .private-toggle {
   align-items: center;
   background: transparent;
@@ -298,7 +344,7 @@ input {
 .player-grid {
   display: grid;
   gap: 0.55rem;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
@@ -308,10 +354,10 @@ input {
   background: rgba(247, 241, 230, 0.05);
   border: 1px solid transparent;
   border-radius: 16px;
-  display: grid;
-  gap: 0.45rem;
-  min-height: 88px;
-  padding: 0.6rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
 }
 
 .player-tile.is-self {
@@ -323,21 +369,24 @@ input {
 }
 
 .player-heading {
-  align-items: baseline;
   display: flex;
-  gap: 0.35rem;
-  justify-content: space-between;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.25rem;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .player-tile strong {
-  display: block;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .player-id {
   color: rgba(247, 241, 230, 0.55);
-  font-size: 0.78rem;
+  font-size: 0.65rem;
 }
 
 .tag-row {
@@ -351,9 +400,9 @@ input {
   background: rgba(247, 241, 230, 0.12);
   border-radius: 999px;
   color: #f7f1e6;
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  padding: 0.18rem 0.48rem;
+  padding: 0.12rem 0.4rem;
   text-transform: capitalize;
 }
 
@@ -409,6 +458,75 @@ input {
   grid-column: span 2;
 }
 
+.policy-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.track-slot {
+  width: 32px;
+  height: 44px;
+  border: 1px dashed rgba(247, 241, 230, 0.2);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.1rem;
+  color: rgba(247, 241, 230, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.track-slot.filled.liberal {
+  background: linear-gradient(135deg, #99c2ea, #5a8eb4);
+  border: 1px solid #5a8eb4;
+  color: #091620;
+  box-shadow: 0 4px 12px rgba(90, 142, 180, 0.3);
+}
+
+.track-slot.filled.fascist {
+  background: linear-gradient(135deg, #d67a61, #972924);
+  border: 1px solid #972924;
+  color: #fff4f1;
+  box-shadow: 0 4px 12px rgba(151, 41, 36, 0.3);
+}
+
+.unenacted-row {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 640px) {
+  .board-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+  .board-tile.wide {
+    grid-column: span 3;
+  }
+  .board-tile {
+    min-height: auto;
+    padding: 0.5rem;
+  }
+  .unenacted-row {
+    gap: 0.5rem;
+  }
+}
+
+.liberal-text {
+  color: #73b1dd;
+  text-shadow: 0 0 10px rgba(115, 177, 221, 0.2);
+}
+
+.fascist-text {
+  color: #d86d58;
+  text-shadow: 0 0 10px rgba(216, 109, 88, 0.2);
+}
+
 .log-panel {
   align-self: start;
 }
@@ -433,12 +551,38 @@ input {
 
 .action-group + .action-group {
   border-top: 1px solid rgba(247, 241, 230, 0.08);
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.action-modal-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  justify-items: center;
+}
+
+.action-modal-content h3 {
+  margin: 0;
+}
+
+.action-modal-content .primary-action-btn {
   margin-top: 1rem;
-  padding-top: 1rem;
+  width: 100%;
+  max-width: 300px;
 }
 
 .action-group h3 {
   margin-bottom: 0.75rem;
+}
+
+.action-group .helper {
+  margin-bottom: 1rem;
+}
+
+.action-group label {
+  margin-bottom: 1rem;
 }
 
 .card-row {
@@ -505,7 +649,7 @@ input {
   }
 
   .top-row {
-    grid-template-columns: 1fr;
+    display: block;
   }
 }
 

@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <crow.h>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
