@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Player = {
   id: string;
@@ -115,6 +115,25 @@ function formatPhaseForPeople(phase: RoomState["phase"]) {
   }
 }
 
+// New PolicyLabel component to consistently style Liberal and Fascist policies
+function PolicyLabel({ policy }: { policy: string }) {
+  const isLiberal = policy === "Liberal";
+  const className = `policy-label ${isLiberal ? "policy-label-liberal" : "policy-label-fascist"}`;
+  return (
+    <span className={className}>
+      {policy}
+    </span>
+  );
+}
+
+// New helper function to render text that might be a policy, applying PolicyLabel if appropriate
+function renderPolicyText(text: string): React.ReactNode {
+  if (text === "Liberal" || text === "Fascist") {
+    return <PolicyLabel policy={text} />;
+  }
+  return text;
+}
+
 export default function App() {
   const socketRef = useRef<WebSocket | null>(null);
   const [roomCode, setRoomCode] = useState("DEMO1");
@@ -124,9 +143,9 @@ export default function App() {
   const [playerId, setPlayerId] = useState(() => getStoredPlayerId());
   const [joined, setJoined] = useState(false);
   const [status, setStatus] = useState("Disconnected");
-  const [roomState, setRoomState] = useState<RoomState>(defaultRoomState);
+  const [roomState, setRoomState] = useState<RoomState>(defaultRoomState); // No change needed here
   const [playerView, setPlayerView] = useState<PlayerView | null>(null);
-  const [eventNotice, setEventNotice] = useState("");
+  const [eventNotice, setEventNotice] = useState<string | React.ReactNode>("");
   const [eventKind, setEventKind] = useState<EventKind>("");
   const [noticeKey, setNoticeKey] = useState(0);
   const previousPolicyCountsRef = useRef({ liberal: 0, fascist: 0 });
@@ -143,18 +162,55 @@ export default function App() {
     () => roomState.players.map((player) => `${player.id}:${player.alive ? 1 : 0}`).join("|"),
     [roomState.players],
   );
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const log = (msg: string) => {
+    console.log(msg);
+    setDebugLogs(prev => [...prev, msg]);
+  };
 
   useEffect(() => {
-    const socket = new WebSocket("ws://localhost:18080/ws");
+    let wsUrl = import.meta.env.VITE_WS_URL;
+
+    log("ENV WS URL: " + wsUrl);
+
+    // If no environment variable, fallback to localhost
+    if (!wsUrl) {
+      wsUrl = "ws://localhost:18080/ws";
+      log("Using fallback localhost");
+    }
+
+    // Security: If the page is HTTPS, the socket MUST be WSS
+    if (window.location.protocol === "https:" && wsUrl.startsWith("ws:")) {
+      wsUrl = wsUrl.replace("ws:", "wss:");
+      log("Upgraded to WSS: " + wsUrl);
+    }
+
+    log("FINAL WS URL: " + wsUrl);
+
+    const socket = new WebSocket(wsUrl);
     socketRef.current = socket;
 
-    socket.onopen = () => setStatus("Connected to server");
-    socket.onclose = () => {
+    log("Creating WebSocket...");
+
+    socket.onopen = () => {
+      log("WS OPEN");
+      setStatus("Connected to server");
+    };
+
+    socket.onclose = (e) => {
+      log("WS CLOSED: " + e.code);
       setJoined(false);
       setStatus("Disconnected");
     };
-    socket.onerror = () => setStatus("Connection error");
+
+    socket.onerror = (e) => {
+      log("WS ERROR");
+      setStatus("Connection error");
+    };
+
     socket.onmessage = (event) => {
+      log("WS MESSAGE RECEIVED");
+
       const message = JSON.parse(event.data) as ServerMessage;
 
       if (message.type === "joined_room") {
@@ -196,6 +252,70 @@ export default function App() {
     return () => socket.close();
   }, []);
 
+  // useEffect(() => {
+  //   let wsUrl = import.meta.env.VITE_WS_URL;
+
+  //   // If no environment variable, fallback to localhost
+  //   if (!wsUrl) {
+  //     wsUrl = "ws://localhost:18080/ws";
+  //   }
+
+  //   // Security: If the page is HTTPS, the socket MUST be WSS
+  //   if (window.location.protocol === "https:" && wsUrl.startsWith("ws:")) {
+  //     wsUrl = wsUrl.replace("ws:", "wss:");
+  //   }
+
+  //   const socket = new WebSocket(wsUrl);
+  //   socketRef.current = socket;
+
+  //   socket.onopen = () => setStatus("Connected to server");
+  //   socket.onclose = () => {
+  //     setJoined(false);
+  //     setStatus("Disconnected");
+  //   };
+  //   socket.onerror = () => setStatus("Connection error");
+  //   socket.onmessage = (event) => {
+  //     const message = JSON.parse(event.data) as ServerMessage;
+
+  //     if (message.type === "joined_room") {
+  //       setJoined(true);
+  //       if (message.payload?.playerId) {
+  //         setPlayerId(message.payload.playerId);
+  //         localStorage.setItem("secret-hitler-player-id", message.payload.playerId);
+  //       }
+  //       setStatus(`In room ${message.payload?.roomCode ?? roomCode}`);
+  //       return;
+  //     }
+
+  //     if (message.type === "room_state" && message.payload) {
+  //       setRoomState(message.payload);
+  //       if (syncPending) {
+  //         setStatus(`State synced for room ${message.payload.roomCode}`);
+  //         setSyncPending(false);
+  //       } else {
+  //         setStatus(`In room ${message.payload.roomCode}`);
+  //       }
+  //       return;
+  //     }
+
+  //     if (message.type === "player_view" && message.payload) {
+  //       setPlayerView(message.payload);
+  //       return;
+  //     }
+
+  //     if (message.type === "sync_ack") {
+  //       setStatus("Refreshing room state...");
+  //       return;
+  //     }
+
+  //     if (message.type === "error") {
+  //       setStatus(`Server error: ${message.message ?? "unknown"}`);
+  //     }
+  //   };
+
+  //   return () => socket.close();
+  // }, []);
+
   useEffect(() => {
     if (!joined) {
       previousPolicyCountsRef.current = {
@@ -228,7 +348,7 @@ export default function App() {
     if (nextEntries.length > 0) {
       const latestPolicy = nextEntries[nextEntries.length - 1];
       setEventKind("policy");
-      setEventNotice(`A ${latestPolicy.toLowerCase()} policy was enacted.`);
+      setEventNotice(<>A <PolicyLabel policy={latestPolicy} /> policy was enacted.</>);
       setNoticeKey((value) => value + 1);
       setRoundLog((previousLog) => [
         ...previousLog,
@@ -269,7 +389,7 @@ export default function App() {
 
     if (roomState.winner && previousWinnerRef.current !== roomState.winner) {
       setEventKind("winner");
-      setEventNotice(`${formatLabel(roomState.winner)} win the game.`);
+      setEventNotice(<>{roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} win the game.</>);
       setNoticeKey((value) => value + 1);
     }
 
@@ -399,7 +519,9 @@ export default function App() {
     }
 
     if (roomState.phase === "complete") {
-      return `Game over. Winner: ${formatLabel(roomState.winner)}.`;
+      const winnerLabel = roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />;
+      return <>Game over. Winner: {winnerLabel}.</>;
+
     }
 
     return "Waiting for the game to continue.";
@@ -657,9 +779,9 @@ export default function App() {
                       type="button"
                       className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
                       onClick={() => setSelectedPolicyIndex(index)}
-                    disabled={policyLocked}
+                      disabled={policyLocked}
                   >
-                    <span>{formatLabel(policy)}</span>
+                    <PolicyLabel policy={policy} />
                   </button>
                 ))}
               </div>
@@ -733,13 +855,13 @@ export default function App() {
                 {showPrivateRole && (
                   <div>
                     <dt>Role</dt>
-                    <dd>{formatLabel(playerView?.role ?? "")}</dd>
+                    <dd>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</dd>
                   </div>
                 )}
                 {showPrivateParty && (
                   <div>
                     <dt>Party</dt>
-                    <dd>{formatLabel(playerView?.party ?? "")}</dd>
+                    <dd>{renderPolicyText(formatLabel(playerView?.party ?? ""))}</dd>
                   </div>
                 )}
                 {Boolean(playerView?.knownFascists.length) && (
@@ -751,13 +873,17 @@ export default function App() {
                 {Boolean(playerView?.policyPeek.length) && (
                   <div className="facts-block">
                     <dt>Last policy peek</dt>
-                    <dd>{playerView?.policyPeek.join(", ")}</dd>
+                    <dd>
+                      {playerView?.policyPeek.map((policy, index) => (
+                        <PolicyLabel key={index} policy={policy} />
+                      ))}
+                    </dd>
                   </div>
                 )}
                 {Boolean(playerView?.investigationResult) && (
                   <div>
                     <dt>Investigation</dt>
-                    <dd>{formatLabel(playerView?.investigationResult ?? "")}</dd>
+                    <dd>{renderPolicyText(formatLabel(playerView?.investigationResult ?? ""))}</dd>
                   </div>
                 )}
                 {!showPrivateRole &&
@@ -818,19 +944,19 @@ export default function App() {
           <h2>Public Board</h2>
           <div className="board-grid">
             <div className="board-tile">
-              <span>Liberal policies</span>
+              <span><PolicyLabel policy="Liberal" /> policies</span>
               <strong>{roomState.liberalPolicies}</strong>
             </div>
             <div className="board-tile">
-              <span>Fascist policies</span>
+              <span><PolicyLabel policy="Fascist" /> policies</span>
               <strong>{roomState.fascistPolicies}</strong>
             </div>
             <div className="board-tile">
-              <span>Liberal left</span>
+              <span><PolicyLabel policy="Liberal" /> left</span>
               <strong>{6 - roomState.liberalPolicies}</strong>
             </div>
             <div className="board-tile">
-              <span>Fascist left</span>
+              <span><PolicyLabel policy="Fascist" /> left</span>
               <strong>{11 - roomState.fascistPolicies}</strong>
             </div>
             <div className="board-tile">
@@ -855,14 +981,33 @@ export default function App() {
         <article className="panel compact-panel log-panel">
           <h2>Round Log</h2>
           {roundLog.length > 0 ? (
-            <ul className="log-list">
-              {roundLog.map((entry) => (
-                <li key={entry.round}>
-                  <strong>Round {entry.round}</strong>: president {entry.president}, chancellor {entry.chancellor}, enacted policy {entry.enactedPolicy}
-                  {entry.specialEvent ? `, ${entry.specialEvent}` : ""}
-                </li>
-              ))}
-            </ul>
+            <div className="log-scroll">
+              <table className="round-log-table">
+                <thead>
+                  <tr>
+                    <th>Round</th>
+                    <th>President</th>
+                    <th>Chancellor</th>
+                    <th style={{ textAlign: 'right' }}>Enacted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roundLog.map((entry) => (
+                    <tr key={entry.round}>
+                      <td className="log-round">#{entry.round}</td>
+                      <td className="log-name">{entry.president}</td>
+                      <td className="log-name">{entry.chancellor}</td>
+                      <td className="log-policy">
+                        <PolicyLabel policy={entry.enactedPolicy} />
+                        {entry.specialEvent && (
+                          <div className="log-special">{entry.specialEvent}</div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="helper">No enacted policies yet.</p>
           )}
@@ -870,6 +1015,23 @@ export default function App() {
 
       </section>
       )}
+      <div style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        maxHeight: "200px",
+        overflowY: "auto",
+        background: "black",
+        color: "lime",
+        fontSize: "12px",
+        padding: "5px",
+        zIndex: 9999
+      }}>
+        {debugLogs.map((log, i) => (
+          <div key={i}>{log}</div>
+        ))}
+      </div>
     </main>
   );
 }
