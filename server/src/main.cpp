@@ -144,13 +144,19 @@ json to_json(const sh::Room& room) {
 }
 
 json to_json(const sh::PlayerView& view) {
+    // Hard safeguard: Hitler never knows who the other fascists are by ID.
+    json known_fascists = view.known_fascists;
+    if (view.role == sh::Role::Hitler) {
+        known_fascists = json::array();
+    }
+
     return {
         {"playerId", view.player_id},
         {"playerName", view.player_name},
         {"role", to_string(view.role)},
         {"party", to_string(view.party)},
         {"alive", view.alive},
-        {"knownFascists", view.known_fascists},
+        {"knownFascists", known_fascists},
         {"legislativeHand", policies_to_json(view.legislative_hand)},
         {"policyPeek", policies_to_json(view.policy_peek)},
         {"investigationResult", view.investigation_result.has_value()
@@ -199,11 +205,7 @@ void send_private_view(const std::shared_ptr<sh::Room>& room, const std::string&
     
     auto view = *view_opt;
 
-    // Strictly enforce: Hitler never knows who the other fascists are by ID.
-    // This applies to all player counts per the desired game rules.
-    if (view.role == sh::Role::Hitler) {
-        view.known_fascists.clear();
-    }
+    // Note: Privacy is now also enforced in to_json for extra safety.
 
     connection_it->second->send_text(json{
         {"type", "player_view"},

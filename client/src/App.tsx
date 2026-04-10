@@ -372,14 +372,18 @@ export default function App() {
 
   // Automatically open interaction modal when it becomes the user's turn
   useEffect(() => {
-    // If we are showing the identity reveal, don't trigger actions yet
-    if (showRoleReveal) return;
+    if (showRoleReveal) {
+      // Ensure we haven't "consumed" the next action while the reveal is open
+      prevActionType.current = null;
+      return;
+    }
 
     if (requiredActionType && requiredActionType !== prevActionType.current) {
       const timer = setTimeout(() => {
         setInteractionOpen(true);
-      }, 800);
-      prevActionType.current = requiredActionType;
+        // Update the ref ONLY once the modal is actually triggered
+        prevActionType.current = requiredActionType;
+      }, 1000);
       return () => clearTimeout(timer);
     } else if (!requiredActionType) {
       setInteractionOpen(false);
