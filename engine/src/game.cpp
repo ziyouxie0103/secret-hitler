@@ -14,7 +14,7 @@ optional<GameConfig> config_for_player_count(size_t player_count) {
                 .player_count = 5,
                 .liberal_count = 3,
                 .non_hitler_fascist_count = 1,
-                .hitler_knows_fascists = true,
+                .hitler_knows_fascists = false,
                 .fascist_track = {
                     ExecutivePower::None,
                     ExecutivePower::None,
@@ -29,7 +29,7 @@ optional<GameConfig> config_for_player_count(size_t player_count) {
                 .player_count = 6,
                 .liberal_count = 4,
                 .non_hitler_fascist_count = 1,
-                .hitler_knows_fascists = true,
+                .hitler_knows_fascists = false,
                 .fascist_track = {
                     ExecutivePower::None,
                     ExecutivePower::None,

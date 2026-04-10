@@ -149,6 +149,8 @@ export default function App() {
   const [eventKind, setEventKind] = useState<EventKind>("");
   const [noticeKey, setNoticeKey] = useState(0);
   const [interactionOpen, setInteractionOpen] = useState(false);
+  const [showRoleReveal, setShowRoleReveal] = useState(false);
+  const prevPhase = useRef<string>("lobby");
   const previousPolicyCountsRef = useRef({ liberal: 0, fascist: 0 });
   const prevActionType = useRef<string | null>(null);
   const previousPlayersRef = useRef<Record<string, boolean>>({});
@@ -370,18 +372,27 @@ export default function App() {
 
   // Automatically open interaction modal when it becomes the user's turn
   useEffect(() => {
+    // If we are showing the identity reveal, don't trigger actions yet
+    if (showRoleReveal) return;
+
     if (requiredActionType && requiredActionType !== prevActionType.current) {
-      // Add a 2-second delay before popping up the action window.
-      // This gives players time to see policy enactments or execution notices first.
       const timer = setTimeout(() => {
         setInteractionOpen(true);
-      }, 1000);
+      }, 800);
+      prevActionType.current = requiredActionType;
       return () => clearTimeout(timer);
     } else if (!requiredActionType) {
       setInteractionOpen(false);
+      prevActionType.current = null;
     }
-    prevActionType.current = requiredActionType;
-  }, [requiredActionType]);
+  }, [requiredActionType, showRoleReveal]);
+
+  useEffect(() => {
+    if (roomState.phase !== "lobby" && prevPhase.current === "lobby") {
+      setShowRoleReveal(true);
+    }
+    prevPhase.current = roomState.phase;
+  }, [roomState.phase]);
 
   const { totalF, totalL } = useMemo(() => {
     const f = roomState.players.length > 0 ? Math.ceil(roomState.players.length / 2) - 1 : 0;
@@ -616,6 +627,21 @@ export default function App() {
         </div>
       )}
 
+      {joined && showRoleReveal && (
+        <section className="notice-overlay" style={{ zIndex: 300 }}>
+          <div className="panel notice-modal">
+            <p className="notice-kicker">Your Secret Identity</p>
+            <strong>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</strong>
+            <p className="helper">
+              You are in the {renderPolicyText(formatLabel(playerView?.party ?? ""))} party.
+            </p>
+            <button type="button" onClick={() => setShowRoleReveal(false)}>
+              I Understand
+            </button>
+          </div>
+        </section>
+      )}
+
       {joined && interactionOpen && isActionRequired && (
         <section className="notice-overlay">
           <div className="panel notice-modal">
@@ -645,7 +671,10 @@ export default function App() {
               {canVote && (
                 <div className="action-group">
                   <h3>Cast Your Vote</h3>
-                  <p className="helper">Nominee: {displayPlayer(roomState.chancellorId)}</p>
+                  <p className="helper">
+                    President {displayPlayer(roomState.presidentId)} nominated{" "}
+                    {displayPlayer(roomState.chancellorId)} as chancellor.
+                  </p>
                   <div className="button-row compact-row">
                     <button
                       type="button"
@@ -807,10 +836,21 @@ export default function App() {
                     <dd>{renderPolicyText(formatLabel(playerView?.party ?? ""))}</dd>
                   </div>
                 )}
-                {Boolean(playerView?.knownFascists.length) && (
+                {playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
+                  <div>
+                    <dt>Teammates</dt>
+                    <dd>
+                      {roomState.players.length <= 6
+                        ? "You have one fascist teammate, but you do not know their identity."
+                        : `You have ${roomState.players.length >= 9 ? 3 : 2} fascist teammates, but you do not know who they are.`}
+                    </dd>
+                  </div>
+                ) : Boolean(playerView?.knownFascists.length) && (
                   <div>
                     <dt>Known fascists</dt>
-                    <dd>{playerView?.knownFascists.join(", ")}</dd>
+                    <dd>
+                      {playerView?.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}
+                    </dd>
                   </div>
                 )}
                 {Boolean(playerView?.policyPeek.length) && (
@@ -888,10 +928,12 @@ export default function App() {
 
         <article className="panel compact-panel players-panel">
           <div className="players-header">
-            <div className="unenacted-row">
-              <span className="liberal-text">L: {totalL}</span>
-              <span className="fascist-text">F: {totalF}</span>
-            </div>
+            {roomState.phase !== "lobby" && (
+              <div className="unenacted-row">
+                <span className="liberal-text">L: {totalL}</span>
+                <span className="fascist-text">F: {totalF}</span>
+              </div>
+            )}
           </div>
           <ul className="player-grid">
             {roomState.players.map((player) => {

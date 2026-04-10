@@ -192,14 +192,22 @@ void send_private_view(const std::shared_ptr<sh::Room>& room, const std::string&
         return;
     }
 
-    const auto view = room->game->player_view(player_id);
-    if (!view.has_value()) {
+    const auto view_opt = room->game->player_view(player_id);
+    if (!view_opt.has_value()) {
         return;
+    }
+    
+    auto view = *view_opt;
+
+    // Strictly enforce: Hitler never knows who the other fascists are by ID.
+    // This applies to all player counts per the desired game rules.
+    if (view.role == sh::Role::Hitler) {
+        view.known_fascists.clear();
     }
 
     connection_it->second->send_text(json{
         {"type", "player_view"},
-        {"payload", to_json(*view)},
+        {"payload", to_json(view)},
     }.dump());
 }
 
