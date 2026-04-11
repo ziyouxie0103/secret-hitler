@@ -299,7 +299,7 @@ int main() {
                                                       const std::string& data,
                                                       bool /*is_binary*/) {
             const auto message = json::parse(data, nullptr, false);
-            if (message.is_discarded()) {
+            if (message.is_discarded() || !message.is_object()) {
                 send_error(conn, "invalid_json");
                 return;
             }
