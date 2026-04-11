@@ -14,7 +14,7 @@ optional<GameConfig> config_for_player_count(size_t player_count) {
                 .player_count = 5,
                 .liberal_count = 3,
                 .non_hitler_fascist_count = 1,
-                .hitler_knows_fascists = false,
+                .hitler_knows_fascists = true,
                 .fascist_track = {
                     ExecutivePower::None,
                     ExecutivePower::None,
@@ -29,7 +29,7 @@ optional<GameConfig> config_for_player_count(size_t player_count) {
                 .player_count = 6,
                 .liberal_count = 4,
                 .non_hitler_fascist_count = 1,
-                .hitler_knows_fascists = false,
+                .hitler_knows_fascists = true,
                 .fascist_track = {
                     ExecutivePower::None,
                     ExecutivePower::None,
@@ -280,7 +280,7 @@ bool Game::enact_policy(Policy policy, bool from_top_deck) {
         return true;
     }
 
-    if (policy == Policy::Fascist && config_.has_value()) {
+    if (policy == Policy::Fascist && config_.has_value() && !from_top_deck) {
         const ExecutivePower power = config_->fascist_track[static_cast<size_t>(fascist_policies_ - 1)];
         if (power == ExecutivePower::None) {
             pending_executive_power_.reset();
@@ -520,7 +520,7 @@ bool Game::is_term_limited(const string& player_id) const {
         return true;
     }
 
-    return config_->player_count > 5
+    return alive_player_count() > 5
         && last_president_id_.has_value()
         && *last_president_id_ == player_id;
 }
@@ -669,6 +669,8 @@ bool Game::resolve_election() {
     ++election_tracker_;
     if (election_tracker_ >= 3) {
         election_tracker_ = 0;
+        last_president_id_.reset();
+        last_chancellor_id_.reset();
         if (!top_deck_policy()) {
             return false;
         }

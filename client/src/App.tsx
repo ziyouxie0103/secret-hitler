@@ -118,20 +118,36 @@ function formatPhaseForPeople(phase: RoomState["phase"]) {
 // New PolicyLabel component to consistently style Liberal and Fascist policies
 function PolicyLabel({ policy }: { policy: string }) {
   const isLiberal = policy === "Liberal";
-  const className = `policy-label ${isLiberal ? "policy-label-liberal" : "policy-label-fascist"}`;
+  const src = isLiberal ? "/images/liberal_policy.png" : "/images/fascist_policy.png";
   return (
-    <span className={className}>
-      {policy}
-    </span>
+    <img 
+      src={src} 
+      alt={policy} 
+      style={{ 
+        height: '1.4em', 
+        verticalAlign: 'middle', 
+        borderRadius: '2px',
+        margin: '0 2px'
+      }} 
+    />
   );
 }
 
 // New helper function to render text that might be a policy, applying PolicyLabel if appropriate
 function renderPolicyText(text: string): React.ReactNode {
-  if (text === "Liberal" || text === "Fascist") {
-    return <PolicyLabel policy={text} />;
-  }
-  return text;
+  if (!text) return text;
+  const parts = text.split(/(liberals?|fascists?)/gi);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const lower = part.toLowerCase();
+        if (lower.includes("liberal") || lower.includes("fascist")) {
+          return <PolicyLabel key={i} policy={part} />;
+        }
+        return part;
+      })}
+    </>
+  );
 }
 
 export default function App() {
@@ -278,12 +294,30 @@ export default function App() {
     if (nextEntries.length > 0) {
       const latestPolicy = nextEntries[nextEntries.length - 1];
       setEventKind("policy");
-      
-      let notice: React.ReactNode = <>A <PolicyLabel policy={latestPolicy} /> policy was enacted.</>;
-      if (latestPolicy === "Fascist" && roomState.pendingExecutivePower && roomState.pendingExecutivePower !== "none") {
+
+      const policyColorClass = latestPolicy.toLowerCase() === "liberal" ? "liberal-text" : "fascist-text";
+      let notice: React.ReactNode = (
+        <span className={policyColorClass} style={{ fontWeight: 'bold' }}>
+          {latestPolicy} Policy
+        </span>
+      );
+
+      if (latestPolicy === "Fascist") {
         const ordinal = ["", "first", "second", "third", "fourth", "fifth", "sixth"][roomState.fascistPolicies] || "latest";
-        const powerLabel = formatLabel(roomState.pendingExecutivePower);
-        notice = renderPolicyText(`The ${ordinal} fascist policy was enacted! The president got ${powerLabel} power.`);
+        if (roomState.pendingExecutivePower && roomState.pendingExecutivePower !== "none") {
+          const powerLabel = formatLabel(roomState.pendingExecutivePower);
+          notice = (
+            <>
+              The {ordinal} <span className="fascist-text">fascist</span> policy was enacted! The president got {powerLabel} power.
+            </>
+          );
+        } else if (roomState.fascistPolicies === 3 && (roomState.players.length === 5 || roomState.players.length === 6)) {
+          notice = (
+            <>
+              The third <span className="fascist-text">fascist</span> policy was enacted! The president got to peek at the deck.
+            </>
+          );
+        }
       }
 
       setEventNotice(notice);
@@ -327,7 +361,11 @@ export default function App() {
 
     if (roomState.winner && previousWinnerRef.current !== roomState.winner) {
       setEventKind("winner");
-      setEventNotice(<>{roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} win the game.</>);
+      const winnerText = roomState.winner === "liberals" ? "Liberals" : "Fascists";
+      const colorClass = roomState.winner === "liberals" ? "liberal-text" : "fascist-text";
+      setEventNotice(
+        <><span className={colorClass}>{winnerText}</span> win the game.</>
+      );
       setNoticeKey((value) => value + 1);
     }
 
@@ -490,12 +528,14 @@ export default function App() {
       const intro = `The ${ordinal} fascist policy was enacted. `;
 
       return isPresident
-        ? <>{renderPolicyText(intro)}You're the president. Resolve {powerLabel}.</>
-        : <>{renderPolicyText(intro)}Waiting for {titledPlayer("president", roomState.presidentId)} to resolve {powerLabel}.</>;
+        ? <>{intro}You're the president. Resolve {powerLabel}.</>
+        : <>{intro}Waiting for {titledPlayer("president", roomState.presidentId)} to resolve {powerLabel}.</>;
     }
 
     if (roomState.phase === "complete") {
-      return <>Game over. {roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} win!</>;
+      const winnerText = roomState.winner === "liberals" ? "Liberals" : "Fascists";
+      const colorClass = roomState.winner === "liberals" ? "liberal-text" : "fascist-text";
+      return <>Game over. <span className={colorClass}>{winnerText}</span> win!</>;
     }
 
     return "Waiting for the game to continue.";
@@ -622,16 +662,17 @@ export default function App() {
                   <dd className="dead-notice">You are dead and cannot take actions now.</dd>
                 </div>
               )}
-              {showPrivateRole && (
-                <div>
-                  <dt>Role</dt>
-                  <dd>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</dd>
-                </div>
-              )}
-              {showPrivateParty && (
-                <div>
-                  <dt>Party</dt>
-                  <dd>{renderPolicyText(formatLabel(playerView?.party ?? ""))}</dd>
+              {(showPrivateRole || showPrivateParty) && (
+                <div 
+                  className="identity-row"
+                  style={{ display: 'flex', flexDirection: 'row', gap: '0.5rem', justifyContent: 'center', flexWrap: 'nowrap', marginBottom: '0.5rem' }}
+                >
+                  {showPrivateParty && (
+                    <img src={`/images/${playerView?.party}_party.png`} alt={playerView?.party} style={{ height: '6rem', borderRadius: '4px' }} />
+                  )}
+                  {showPrivateRole && (
+                    <img src={`/images/${playerView?.role}_role.png`} alt={playerView?.role} style={{ height: '6rem', borderRadius: '4px' }} />
+                  )}
                 </div>
               )}
               {playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
@@ -692,7 +733,6 @@ export default function App() {
             }}>
               {roomState.players.map((player) => {
                 const tags = [
-                  player.id === playerId ? "you" : "",
                   player.id === roomState.hostPlayerId ? "host" : "",
                   player.id === roomState.presidentId ? "president" : "",
                   player.id === roomState.chancellorId ? "chancellor" : "",
@@ -744,15 +784,6 @@ export default function App() {
               })}
             </ul>
 
-            {roomState.phase !== "lobby" && (
-              <div className="players-header" style={{ width: '100%' }}>
-                <div className="unenacted-row" style={{ justifyContent: 'center' }}>
-                  <span className="liberal-text">L: {totalL}</span>
-                  <span className="fascist-text">F: {totalF}</span>
-                </div>
-              </div>
-            )}
-
             {isActionRequired && (
               <div style={{
                 backgroundColor: '#e74c3c',
@@ -771,30 +802,51 @@ export default function App() {
 
             {canVote && (
               <div className="action-inline-controls">
-                <div className="button-row compact-row">
-                  <button
-                    type="button"
-                    className={selectedVote === "ja" ? "selected" : "secondary"}
-                    onClick={() => setSelectedVote("ja")}
-                    disabled={voteLocked}
-                  >
-                    Ja!
-                  </button>
-                  <button
-                    type="button"
-                    className={selectedVote === "nein" ? "selected danger" : "secondary"}
-                    onClick={() => setSelectedVote("nein")}
-                    disabled={voteLocked}
-                  >
-                    Nein!
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem', justifyContent: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVote("ja")}
+                      disabled={voteLocked}
+                      style={{ 
+                        background: 'none', 
+                        border: 'none', 
+                        padding: 0, 
+                        cursor: 'pointer',
+                        boxShadow: selectedVote === "ja" ? '0 0 0 3px var(--accent)' : 'none',
+                        borderRadius: '4px',
+                        opacity: selectedVote && selectedVote !== "ja" ? 0.5 : 1,
+                        transition: 'opacity 0.2s, box-shadow 0.2s'
+                      }}
+                    >
+                      <img src="/images/ja.png" alt="Ja" style={{ height: '4rem', display: 'block' }} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedVote("nein")}
+                      disabled={voteLocked}
+                      style={{ 
+                        background: 'none', 
+                        border: 'none', 
+                        padding: 0, 
+                        cursor: 'pointer',
+                        boxShadow: selectedVote === "nein" ? '0 0 0 3px #e74c3c' : 'none',
+                        borderRadius: '4px',
+                        opacity: selectedVote && selectedVote !== "nein" ? 0.5 : 1,
+                        transition: 'opacity 0.2s, box-shadow 0.2s'
+                      }}
+                    >
+                      <img src="/images/nein.png" alt="Nein" style={{ height: '4rem', display: 'block' }} />
+                    </button>
+                  </div>
                   <button 
                     type="button" 
                     className="primary-action-btn"
                     onClick={confirmVote} 
                     disabled={voteLocked || !selectedVote}
+                    style={{ width: '100%', maxWidth: '300px' }}
                   >
-                    {voteLocked ? "Vote Locked" : "Confirm Vote"}
+                    {voteLocked ? "Vote Locked" : "Confirm"}
                   </button>
                 </div>
               </div>
@@ -810,9 +862,19 @@ export default function App() {
                       className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
                       onClick={() => setSelectedPolicyIndex(index)}
                       disabled={policyLocked}
-                      style={{ padding: '0.5rem 1rem' }}
+                      style={{ 
+                        padding: 0, 
+                        overflow: 'hidden', 
+                        background: 'none', 
+                        border: 'none',
+                        width: 'min(30%, 120px)'
+                      }}
                     >
-                      <PolicyLabel policy={policy} />
+                      <img 
+                        src={`/images/${policy.toLowerCase()}_policy.png`} 
+                        alt={policy} 
+                        style={{ width: '100%', height: 'auto', display: 'block' }} 
+                      />
                     </button>
                   ))}
                 </div>
@@ -822,7 +884,7 @@ export default function App() {
                   onClick={confirmPolicyAction} 
                   disabled={policyLocked || selectedPolicyIndex === null}
                 >
-                  {policyLocked ? "Action Confirmed" : "Confirm Choice"}
+                  {policyLocked ? "Action Confirmed" : "Confirm"}
                 </button>
               </div>
             )}
@@ -851,9 +913,6 @@ export default function App() {
                     >
                       Confirm
                     </button>
-                    <button type="button" className="secondary" onClick={() => setPendingTargetId(null)}>
-                      Cancel
-                    </button>
                   </div>
                 )}
               </div>
@@ -872,9 +931,19 @@ export default function App() {
                 <div 
                   key={`${policy}-${index}`} 
                   className={`policy-card ${policy}`}
-                  style={{ padding: '1rem', minWidth: '80px', textAlign: 'center' }}
+                  style={{ 
+                    padding: 0, 
+                    width: 'min(30%, 120px)',
+                    overflow: 'hidden', 
+                    background: 'none', 
+                    border: 'none' 
+                  }}
                 >
-                  <PolicyLabel policy={policy} />
+                  <img 
+                    src={`/images/${policy.toLowerCase()}_policy.png`} 
+                    alt={policy} 
+                    style={{ width: '100%', height: 'auto', display: 'block' }} 
+                  />
                 </div>
               ))}
             </div>
@@ -890,7 +959,7 @@ export default function App() {
           <div className="panel notice-modal">
             <p className="notice-kicker">Game Over</p>
             <h1 style={{ margin: '1rem 0', fontSize: '2rem' }}>
-              {roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} Win!
+              {roomState.winner === "liberals" ? <span className="liberal-text">Liberals</span> : <span className="fascist-text">Fascists</span>} Win!
             </h1>
             <p className="helper" style={{ fontSize: '1.1rem', marginBottom: '2rem' }}>
               {roomState.winner === "liberals" 
@@ -932,10 +1001,19 @@ export default function App() {
         <section className="notice-overlay" style={{ zIndex: 300 }}>
           <div className="panel notice-modal">
             <p className="notice-kicker">Your Secret Identity</p>
-            <strong>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</strong>
-            <p className="helper">
-              You are in the {renderPolicyText(formatLabel(playerView?.party ?? ""))} party.
-            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center', margin: '1rem 0', flexWrap: 'nowrap', width: '100%' }}>
+              <img src={`/images/${playerView?.party}_party.png`} alt={playerView?.party} style={{ width: '48%', height: 'auto', maxHeight: '14rem', borderRadius: '8px', objectFit: 'contain' }} />
+              <img src={`/images/${playerView?.role}_role.png`} alt={playerView?.role} style={{ width: '48%', height: 'auto', maxHeight: '14rem', borderRadius: '8px', objectFit: 'contain' }} />
+            </div>
+            {playerView?.role !== "liberal" && (
+              <div className="helper" style={{ marginTop: '0.5rem', fontSize: '1.1rem', color: '#f7f1e6' }}>
+                {playerView?.knownFascists && playerView.knownFascists.length > 0 ? (
+                  <strong>Teammates: {playerView.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}</strong>
+                ) : (
+                  <span>You don't know who your teammates are.</span>
+                )}
+              </div>
+            )}
             <button type="button" onClick={() => setShowRoleReveal(false)}>
               I Understand
             </button>
@@ -1000,7 +1078,9 @@ export default function App() {
                     key={i} 
                     className={`track-slot ${i < roomState.liberalPolicies ? 'filled liberal' : ''}`}
                   >
-                    {i < roomState.liberalPolicies ? 'L' : ''}
+                    {i < roomState.liberalPolicies && (
+                      <img src="/images/liberal_policy.png" alt="Liberal Policy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -1012,18 +1092,20 @@ export default function App() {
                     key={i} 
                     className={`track-slot ${i < roomState.fascistPolicies ? 'filled fascist' : ''}`}
                   >
-                    {i < roomState.fascistPolicies ? 'F' : ''}
+                    {i < roomState.fascistPolicies && (
+                      <img src="/images/fascist_policy.png" alt="Fascist Policy" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-            <article className="board-tile">
+            <div className="board-tile">
               <span>Unenacted</span>
               <div className="unenacted-row">
                 <strong className="liberal-text">{6 - roomState.liberalPolicies}</strong>
                 <strong className="fascist-text">{11 - roomState.fascistPolicies}</strong>
               </div>
-            </article>
+            </div>
             <div className="board-tile">
               <span>Failed</span>
               <strong>{roomState.electionTracker}</strong>
@@ -1032,29 +1114,35 @@ export default function App() {
               <span>Votes</span>
               <strong>{roomState.pendingVotes}</strong>
             </div>
+            <div className="board-tile">
+              <span>Parties</span>
+              <div className="unenacted-row">
+                <strong className="liberal-text">L: {totalL}</strong>
+                <strong className="fascist-text">F: {totalF}</strong>
+              </div>
+            </div>
           </div>
         </article>
 
         <article className="panel compact-panel log-panel">
-          <h2>Round Log</h2>
           {roundLog.length > 0 ? (
             <div className="log-scroll">
               <table className="round-log-table">
                 <thead>
                   <tr>
-                    <th>Round</th>
-                    <th>President</th>
-                    <th>Chancellor</th>
-                    <th style={{ textAlign: 'right' }}>Enacted</th>
+                    <th style={{ textAlign: 'left' }}>Round</th>
+                    <th style={{ textAlign: 'left' }}>President</th>
+                    <th style={{ textAlign: 'left' }}>Chancellor</th>
+                    <th style={{ textAlign: 'left' }}>Enacted</th>
                   </tr>
                 </thead>
                 <tbody>
                   {roundLog.map((entry) => (
-                    <tr key={entry.round}>
-                      <td className="log-round">#{entry.round}</td>
-                      <td className="log-name">{entry.president}</td>
-                      <td className="log-name">{entry.chancellor}</td>
-                      <td className="log-policy">
+                    <tr key={entry.round} style={{ verticalAlign: 'top' }}>
+                      <td className="log-round" style={{ textAlign: 'left' }}>#{entry.round}</td>
+                      <td className="log-name" style={{ textAlign: 'left' }}>{entry.president}</td>
+                      <td className="log-name" style={{ textAlign: 'left' }}>{entry.chancellor}</td>
+                      <td className="log-policy" style={{ textAlign: 'left' }}>
                         <PolicyLabel policy={entry.enactedPolicy} />
                         {entry.specialEvent && (
                           <div className="log-special">{entry.specialEvent}</div>
