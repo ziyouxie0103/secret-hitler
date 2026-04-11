@@ -138,8 +138,6 @@ export default function App() {
   const socketRef = useRef<WebSocket | null>(null);
   const [roomCode, setRoomCode] = useState("room1");
   const [name, setName] = useState(() => localStorage.getItem("secret-hitler-player-name") ?? "");
-  const [nomineeId, setNomineeId] = useState("");
-  const [executiveTargetId, setExecutiveTargetId] = useState("");
   const [playerId, setPlayerId] = useState(() => getStoredPlayerId());
   const [joined, setJoined] = useState(false);
   const [status, setStatus] = useState("Disconnected");
@@ -148,8 +146,8 @@ export default function App() {
   const [eventNotice, setEventNotice] = useState<string | React.ReactNode>("");
   const [eventKind, setEventKind] = useState<EventKind>("");
   const [noticeKey, setNoticeKey] = useState(0);
-  const [interactionOpen, setInteractionOpen] = useState(false);
   const [showRoleReveal, setShowRoleReveal] = useState(false);
+  const [showGameOver, setShowGameOver] = useState(false);
   const prevPhase = useRef<string>("lobby");
   const previousPolicyCountsRef = useRef({ liberal: 0, fascist: 0 });
   const prevActionType = useRef<string | null>(null);
@@ -160,6 +158,9 @@ export default function App() {
   const [selectedVote, setSelectedVote] = useState<"ja" | "nein" | "">("");
   const [voteLocked, setVoteLocked] = useState(false);
   const [selectedPolicyIndex, setSelectedPolicyIndex] = useState<number | null>(null);
+  const [showPeekResult, setShowPeekResult] = useState(false);
+  const lastPeekRef = useRef<string[]>([]);
+  const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
   const [policyLocked, setPolicyLocked] = useState(false);
   const aliveSignature = useMemo(
     () => roomState.players.map((player) => `${player.id}:${player.alive ? 1 : 0}`).join("|"),
@@ -232,6 +233,19 @@ export default function App() {
     return () => socket.close();
   }, []);
 
+  // Automatically trigger the Policy Peek modal when new data arrives
+  useEffect(() => {
+    const currentPeek = playerView?.policyPeek ?? [];
+    if (currentPeek.length > 0 && JSON.stringify(currentPeek) !== JSON.stringify(lastPeekRef.current)) {
+      setShowPeekResult(true);
+      lastPeekRef.current = currentPeek;
+    } else if (currentPeek.length === 0) {
+      // Clear the "seen" state if the server clears the peek
+      setShowPeekResult(false);
+      lastPeekRef.current = [];
+    }
+  }, [playerView?.policyPeek]);
+
   useEffect(() => {
     if (!joined) {
       previousPolicyCountsRef.current = {
@@ -264,7 +278,15 @@ export default function App() {
     if (nextEntries.length > 0) {
       const latestPolicy = nextEntries[nextEntries.length - 1];
       setEventKind("policy");
-      setEventNotice(<>A <PolicyLabel policy={latestPolicy} /> policy was enacted.</>);
+      
+      let notice: React.ReactNode = <>A <PolicyLabel policy={latestPolicy} /> policy was enacted.</>;
+      if (latestPolicy === "Fascist" && roomState.pendingExecutivePower && roomState.pendingExecutivePower !== "none") {
+        const ordinal = ["", "first", "second", "third", "fourth", "fifth", "sixth"][roomState.fascistPolicies] || "latest";
+        const powerLabel = formatLabel(roomState.pendingExecutivePower);
+        notice = renderPolicyText(`The ${ordinal} fascist policy was enacted! The president got ${powerLabel} power.`);
+      }
+
+      setEventNotice(notice);
       setNoticeKey((value) => value + 1);
       setRoundLog((previousLog) => [
         ...previousLog,
@@ -370,30 +392,12 @@ export default function App() {
 
   const isActionRequired = requiredActionType !== null;
 
-  // Automatically open interaction modal when it becomes the user's turn
-  useEffect(() => {
-    if (showRoleReveal) {
-      // Ensure we haven't "consumed" the next action while the reveal is open
-      prevActionType.current = null;
-      return;
-    }
-
-    if (requiredActionType && requiredActionType !== prevActionType.current) {
-      const timer = setTimeout(() => {
-        setInteractionOpen(true);
-        // Update the ref ONLY once the modal is actually triggered
-        prevActionType.current = requiredActionType;
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (!requiredActionType) {
-      setInteractionOpen(false);
-      prevActionType.current = null;
-    }
-  }, [requiredActionType, showRoleReveal]);
-
   useEffect(() => {
     if (roomState.phase !== "lobby" && prevPhase.current === "lobby") {
       setShowRoleReveal(true);
+    }
+    if (roomState.phase === "complete" && prevPhase.current !== "complete") {
+      setShowGameOver(true);
     }
     prevPhase.current = roomState.phase;
   }, [roomState.phase]);
@@ -416,6 +420,12 @@ export default function App() {
       setPolicyLocked(false);
     }
   }, [canPresidentDiscard, canChancellorEnact, roomState.phase]);
+
+  useEffect(() => {
+    if (!canNominate && !canResolveExecutive) {
+      setPendingTargetId(null);
+    }
+  }, [canNominate, canResolveExecutive]);
 
   function displayPlayer(playerIdToDisplay: string) {
     if (!playerIdToDisplay) {
@@ -475,15 +485,17 @@ export default function App() {
     }
 
     if (roomState.phase === "executive_action") {
+      const ordinal = ["", "first", "second", "third", "fourth", "fifth", "sixth"][roomState.fascistPolicies] || "latest";
+      const powerLabel = formatLabel(roomState.pendingExecutivePower);
+      const intro = `The ${ordinal} fascist policy was enacted. `;
+
       return isPresident
-        ? `You're the president. Resolve ${formatLabel(roomState.pendingExecutivePower)}.`
-        : `Waiting for ${titledPlayer("president", roomState.presidentId)} to resolve ${formatLabel(roomState.pendingExecutivePower)}.`;
+        ? <>{renderPolicyText(intro)}You're the president. Resolve {powerLabel}.</>
+        : <>{renderPolicyText(intro)}Waiting for {titledPlayer("president", roomState.presidentId)} to resolve {powerLabel}.</>;
     }
 
     if (roomState.phase === "complete") {
-      const winnerLabel = roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />;
-      return <>Game over. Winner: {winnerLabel}.</>;
-
+      return <>Game over. {roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} win!</>;
     }
 
     return "Waiting for the game to continue.";
@@ -496,6 +508,12 @@ export default function App() {
     }
 
     socketRef.current.send(JSON.stringify(payload));
+  }
+
+  function handlePlayerClick(targetId: string) {
+    if (canNominate || canResolveExecutive) {
+      setPendingTargetId(targetId);
+    }
   }
 
   function joinRoom(event: FormEvent<HTMLFormElement>) {
@@ -513,17 +531,11 @@ export default function App() {
     sendMessage({ type: "start_game" });
   }
 
-  function nominateChancellor() {
-    if (!nomineeId.trim()) {
-      setStatus("Enter a player id to nominate");
-      return;
-    }
-
+  function nominateChancellor(targetPlayerId: string) {
     sendMessage({
       type: "nominate_chancellor",
-      targetPlayerId: nomineeId.trim(),
+      targetPlayerId,
     });
-    setInteractionOpen(false);
   }
 
   function castVote(vote: "ja" | "nein") {
@@ -541,7 +553,6 @@ export default function App() {
 
     castVote(selectedVote);
     setVoteLocked(true);
-    setInteractionOpen(false);
   }
 
   function presidentDiscard(index: number) {
@@ -567,7 +578,6 @@ export default function App() {
     if (canPresidentDiscard) {
       presidentDiscard(selectedPolicyIndex);
       setPolicyLocked(true);
-      setInteractionOpen(false);
       setSelectedPolicyIndex(null);
       return;
     }
@@ -575,34 +585,321 @@ export default function App() {
     if (canChancellorEnact) {
       chancellorEnact(selectedPolicyIndex);
       setPolicyLocked(true);
-      setInteractionOpen(false);
       setSelectedPolicyIndex(null);
     }
   }
 
-  function resolveExecutive(type: "investigate_player" | "call_special_election" | "execute_player") {
-    if (!executiveTargetId.trim()) {
-      setStatus("Enter a player id for the executive target");
-      return;
-    }
-
+  function resolveExecutive(type: string, targetPlayerId: string) {
     sendMessage({
       type,
-      targetPlayerId: executiveTargetId.trim(),
+      targetPlayerId,
     });
-    setInteractionOpen(false);
   }
 
   return (
     <main className="shell">
-      <section className="hero">
-        <h1>Secret Hitler</h1>
-      </section>
+      {!joined && (
+        <section className="hero">
+          <h1>Secret Hitler</h1>
+        </section>
+      )}
 
-      {joined && roomState.phase !== "lobby" && (
-        <section className="panel banner">
-          <div>
+      {joined && (
+        <article className={`panel compact-panel private-panel ${privateOpen ? "is-open" : ""}`} style={{ marginBottom: '1rem' }}>
+          <button
+            type="button"
+            className="private-toggle"
+            onClick={() => setPrivateOpen((open) => !open)}
+          >
+            <span>Your Role</span>
+            <span>{privateOpen ? "Hide" : "Show"}</span>
+          </button>
+          {privateOpen && (
+            <dl className="facts private-facts">
+              {isDead && (
+                <div className="notice-row">
+                  <dt>Status</dt>
+                  <dd className="dead-notice">You are dead and cannot take actions now.</dd>
+                </div>
+              )}
+              {showPrivateRole && (
+                <div>
+                  <dt>Role</dt>
+                  <dd>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</dd>
+                </div>
+              )}
+              {showPrivateParty && (
+                <div>
+                  <dt>Party</dt>
+                  <dd>{renderPolicyText(formatLabel(playerView?.party ?? ""))}</dd>
+                </div>
+              )}
+              {playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
+                <div>
+                  <dt>Teammates</dt>
+                  <dd>
+                    {roomState.players.length <= 6
+                      ? "You have one fascist teammate, but you do not know their identity."
+                      : `You have ${roomState.players.length >= 9 ? 3 : 2} fascist teammates, but you do not know who they are.`}
+                  </dd>
+                </div>
+              ) : Boolean(playerView?.knownFascists.length) && (
+                <div>
+                  <dt>Known fascists</dt>
+                  <dd>
+                    {playerView?.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}
+                  </dd>
+                </div>
+              )}
+              {Boolean(playerView?.investigationResult) && (
+                <div>
+                  <dt>Investigation</dt>
+                  <dd>{renderPolicyText(formatLabel(playerView?.investigationResult ?? ""))}</dd>
+                </div>
+              )}
+              {!showPrivateRole &&
+                !showPrivateParty &&
+                !playerView?.knownFascists.length &&
+                !playerView?.legislativeHand.length &&
+                !playerView?.policyPeek.length &&
+                !playerView?.investigationResult && (
+                  <p className="helper">No private information to show right now.</p>
+                )}
+            </dl>
+          )}
+        </article>
+      )}
+
+      {joined && (
+        <section 
+          className="panel banner" 
+          style={{ 
+            marginBottom: '1rem',
+            border: isActionRequired ? '2px solid #e74c3c' : undefined,
+            boxShadow: isActionRequired ? '0 0 15px rgba(231, 76, 60, 0.3)' : undefined,
+            transition: 'all 0.3s ease'
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center' }}>
+            <ul className="player-grid" style={{ 
+              width: '100%',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))',
+              gap: '10px',
+              padding: 0,
+              margin: '0 0 1rem 0',
+              listStyle: 'none'
+            }}>
+              {roomState.players.map((player) => {
+                const tags = [
+                  player.id === playerId ? "you" : "",
+                  player.id === roomState.hostPlayerId ? "host" : "",
+                  player.id === roomState.presidentId ? "president" : "",
+                  player.id === roomState.chancellorId ? "chancellor" : "",
+                  !player.connected ? "offline" : "",
+                  !player.alive ? "dead" : "",
+                ].filter(Boolean);
+                
+                const isSelectable = (canNominate || canResolveExecutive) && player.alive && player.id !== playerId;
+
+                return (
+                  <li
+                    key={player.id}
+                    className={[
+                      "player-tile",
+                      player.id === playerId ? "is-self" : "",
+                      !player.alive ? "is-dead" : "",
+                      isSelectable ? "is-selectable" : "",
+                      player.id === pendingTargetId ? "is-pending" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  style={{
+                    aspectRatio: '1/1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'flex-start',
+                    alignItems: 'center',
+                    padding: '12px 8px',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
+                    textAlign: 'center',
+                    fontSize: '0.8rem'
+                  }}
+                    onClick={() => isSelectable && handlePlayerClick(player.id)}
+                  >
+                  <div className="player-heading" style={{ width: '100%', overflow: 'hidden', flexShrink: 0 }}>
+                    <strong style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{player.name}</strong>
+                    <span className="player-id" style={{ fontSize: '0.6rem', opacity: 0.6 }}>({player.id})</span>
+                    </div>
+                  <div className="tag-row" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '2px', marginTop: '4px' }}>
+                      {tags.map((tag) => (
+                        <span key={tag} className={`tag ${tag}`}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {roomState.phase !== "lobby" && (
+              <div className="players-header" style={{ width: '100%' }}>
+                <div className="unenacted-row" style={{ justifyContent: 'center' }}>
+                  <span className="liberal-text">L: {totalL}</span>
+                  <span className="fascist-text">F: {totalF}</span>
+                </div>
+              </div>
+            )}
+
+            {isActionRequired && (
+              <div style={{
+                backgroundColor: '#e74c3c',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '0.7rem',
+                fontWeight: '900',
+                textTransform: 'uppercase',
+                letterSpacing: '1px'
+              }}>
+                ⚠️ Action Required
+              </div>
+            )}
             <strong>{nextStep}</strong>
+
+            {canVote && (
+              <div className="action-inline-controls">
+                <div className="button-row compact-row">
+                  <button
+                    type="button"
+                    className={selectedVote === "ja" ? "selected" : "secondary"}
+                    onClick={() => setSelectedVote("ja")}
+                    disabled={voteLocked}
+                  >
+                    Ja!
+                  </button>
+                  <button
+                    type="button"
+                    className={selectedVote === "nein" ? "selected danger" : "secondary"}
+                    onClick={() => setSelectedVote("nein")}
+                    disabled={voteLocked}
+                  >
+                    Nein!
+                  </button>
+                  <button 
+                    type="button" 
+                    className="primary-action-btn"
+                    onClick={confirmVote} 
+                    disabled={voteLocked || !selectedVote}
+                  >
+                    {voteLocked ? "Vote Locked" : "Confirm Vote"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(canPresidentDiscard || canChancellorEnact) && (
+              <div className="action-inline-controls">
+                <div className="card-row" style={{ marginBottom: '0.5rem' }}>
+                  {(playerView?.legislativeHand ?? []).map((policy, index) => (
+                    <button
+                      key={`${policy}-${index}`}
+                      type="button"
+                      className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
+                      onClick={() => setSelectedPolicyIndex(index)}
+                      disabled={policyLocked}
+                      style={{ padding: '0.5rem 1rem' }}
+                    >
+                      <PolicyLabel policy={policy} />
+                    </button>
+                  ))}
+                </div>
+                <button 
+                  type="button" 
+                  className="primary-action-btn"
+                  onClick={confirmPolicyAction} 
+                  disabled={policyLocked || selectedPolicyIndex === null}
+                >
+                  {policyLocked ? "Action Confirmed" : "Confirm Choice"}
+                </button>
+              </div>
+            )}
+
+            {(canNominate || canResolveExecutive) && (
+              <div className="action-inline-controls">
+                {!pendingTargetId ? (
+                  <p className="helper" style={{ margin: 0, color: 'var(--accent)' }}>
+                    Tap a player to select.
+                  </p>
+                ) : (
+                  <div className="button-row compact-row">
+                    <span>Target: <strong>{playerNameById.get(pendingTargetId)}</strong></span>
+                    <button 
+                      type="button" 
+                      className="primary-action-btn"
+                      onClick={() => {
+                        if (canNominate) nominateChancellor(pendingTargetId);
+                        else if (canResolveExecutive) {
+                          const type = roomState.pendingExecutivePower === "investigate_loyalty" ? "investigate_player" : 
+                                       roomState.pendingExecutivePower === "special_election" ? "call_special_election" : "execute_player";
+                          resolveExecutive(type, pendingTargetId);
+                        }
+                        setPendingTargetId(null);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                    <button type="button" className="secondary" onClick={() => setPendingTargetId(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {joined && showPeekResult && (
+        <section className="notice-overlay" style={{ zIndex: 300 }}>
+          <div className="panel notice-modal">
+            <p className="notice-kicker">Policy Peek</p>
+            <p className="helper">The top three policies in the deck are:</p>
+            <div className="card-row" style={{ justifyContent: 'center', margin: '1.5rem 0', gap: '10px' }}>
+              {(playerView?.policyPeek ?? []).map((policy, index) => (
+                <div 
+                  key={`${policy}-${index}`} 
+                  className={`policy-card ${policy}`}
+                  style={{ padding: '1rem', minWidth: '80px', textAlign: 'center' }}
+                >
+                  <PolicyLabel policy={policy} />
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowPeekResult(false)}>
+              Close
+            </button>
+          </div>
+        </section>
+      )}
+
+      {joined && showGameOver && (
+        <section className="notice-overlay" style={{ zIndex: 400 }}>
+          <div className="panel notice-modal">
+            <p className="notice-kicker">Game Over</p>
+            <h1 style={{ margin: '1rem 0', fontSize: '2rem' }}>
+              {roomState.winner === "liberals" ? <PolicyLabel policy="Liberal" /> : <PolicyLabel policy="Fascist" />} Win!
+            </h1>
+            <p className="helper" style={{ fontSize: '1.1rem', marginBottom: '2rem' }}>
+              {roomState.winner === "liberals" 
+                ? "The Liberals have successfully protected democracy." 
+                : "The Fascists have seized control of the government."}
+            </p>
+            <button type="button" className="primary-action-btn" onClick={() => setShowGameOver(false)}>
+              View Final Board
+            </button>
           </div>
         </section>
       )}
@@ -642,122 +939,6 @@ export default function App() {
             <button type="button" onClick={() => setShowRoleReveal(false)}>
               I Understand
             </button>
-          </div>
-        </section>
-      )}
-
-      {joined && interactionOpen && isActionRequired && (
-        <section className="notice-overlay">
-          <div className="panel notice-modal">
-            <div className="action-modal-content">
-              {canNominate && (
-                <div className="action-group">
-                  <h3>Nominate Chancellor</h3>
-                  <label>
-                    <input
-                      value={nomineeId}
-                      onChange={(event) => setNomineeId(event.target.value)}
-                      placeholder="Player ID"
-                    />
-                  </label>
-                  <div className="button-row compact-row">
-                    <button 
-                      type="button" 
-                      className="primary-action-btn" 
-                      onClick={nominateChancellor}
-                    >
-                      Confirm Nomination
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {canVote && (
-                <div className="action-group">
-                  <h3>Cast Your Vote</h3>
-                  <p className="helper">
-                    President {displayPlayer(roomState.presidentId)} nominated{" "}
-                    {displayPlayer(roomState.chancellorId)} as chancellor.
-                  </p>
-                  <div className="button-row compact-row">
-                    <button
-                      type="button"
-                      className={selectedVote === "ja" ? "selected" : "secondary"}
-                      onClick={() => setSelectedVote("ja")}
-                      disabled={voteLocked}
-                    >
-                      Ja!
-                    </button>
-                    <button
-                      type="button"
-                      className={selectedVote === "nein" ? "selected danger" : "secondary"}
-                      onClick={() => setSelectedVote("nein")}
-                      disabled={voteLocked}
-                    >
-                      Nein!
-                    </button>
-                  </div>
-                  <button 
-                    type="button" 
-                    className="primary-action-btn"
-                    onClick={confirmVote} 
-                    disabled={voteLocked || !selectedVote}
-                  >
-                    {voteLocked ? "Vote Locked" : "Confirm Vote"}
-                  </button>
-                </div>
-              )}
-
-              {(canPresidentDiscard || canChancellorEnact) && (
-                <div className="action-group">
-                  <h3>{canPresidentDiscard ? "President: Discard a Policy" : "Chancellor: Enact a Policy"}</h3>
-                  <div className="card-row">
-                    {(playerView?.legislativeHand ?? []).map((policy, index) => (
-                      <button
-                        key={`${policy}-${index}`}
-                        type="button"
-                        className={`policy-card ${policy} ${selectedPolicyIndex === index ? "active" : ""}`}
-                        onClick={() => setSelectedPolicyIndex(index)}
-                        disabled={policyLocked}
-                      >
-                        <PolicyLabel policy={policy} />
-                      </button>
-                    ))}
-                  </div>
-                  <button 
-                    type="button" 
-                    className="primary-action-btn"
-                    onClick={confirmPolicyAction} 
-                    disabled={policyLocked || selectedPolicyIndex === null}
-                  >
-                    {policyLocked ? "Action Confirmed" : "Confirm Choice"}
-                  </button>
-                </div>
-              )}
-
-              {canResolveExecutive && (
-                <div className="action-group">
-                  <h3>{formatLabel(roomState.pendingExecutivePower)}</h3>
-                  <input
-                    value={executiveTargetId}
-                    onChange={(event) => setExecutiveTargetId(event.target.value)}
-                    placeholder="Target Player ID"
-                  />
-                  <div className="button-row compact-row">
-                    <button 
-                      type="button" 
-                      className={roomState.pendingExecutivePower === "execution" ? "danger" : ""}
-                      onClick={() => resolveExecutive(
-                        roomState.pendingExecutivePower === "investigate_loyalty" ? "investigate_player" : 
-                        roomState.pendingExecutivePower === "special_election" ? "call_special_election" : "execute_player"
-                      )}
-                    >
-                      Execute Power
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </section>
       )}
@@ -810,82 +991,6 @@ export default function App() {
 
       {joined && (
       <section className="stack-layout">
-        <section className="top-row">
-          <article className={`panel compact-panel private-panel ${privateOpen ? "is-open" : ""}`}>
-            <button
-              type="button"
-              className="private-toggle"
-              onClick={() => setPrivateOpen((open) => !open)}
-            >
-              <span>Your Private View</span>
-              <span>{privateOpen ? "Hide" : "Show"}</span>
-            </button>
-            {privateOpen && (
-              <dl className="facts private-facts">
-                {isDead && (
-                  <div className="notice-row">
-                    <dt>Status</dt>
-                    <dd className="dead-notice">You are dead and cannot take actions now.</dd>
-                  </div>
-                )}
-                {showPrivateRole && (
-                  <div>
-                    <dt>Role</dt>
-                    <dd>{renderPolicyText(formatLabel(playerView?.role ?? ""))}</dd>
-                  </div>
-                )}
-                {showPrivateParty && (
-                  <div>
-                    <dt>Party</dt>
-                    <dd>{renderPolicyText(formatLabel(playerView?.party ?? ""))}</dd>
-                  </div>
-                )}
-                {playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
-                  <div>
-                    <dt>Teammates</dt>
-                    <dd>
-                      {roomState.players.length <= 6
-                        ? "You have one fascist teammate, but you do not know their identity."
-                        : `You have ${roomState.players.length >= 9 ? 3 : 2} fascist teammates, but you do not know who they are.`}
-                    </dd>
-                  </div>
-                ) : Boolean(playerView?.knownFascists.length) && (
-                  <div>
-                    <dt>Known fascists</dt>
-                    <dd>
-                      {playerView?.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}
-                    </dd>
-                  </div>
-                )}
-                {Boolean(playerView?.policyPeek.length) && (
-                  <div className="facts-block">
-                    <dt>Last policy peek</dt>
-                    <dd>
-                      {playerView?.policyPeek.map((policy, index) => (
-                        <PolicyLabel key={index} policy={policy} />
-                      ))}
-                    </dd>
-                  </div>
-                )}
-                {Boolean(playerView?.investigationResult) && (
-                  <div>
-                    <dt>Investigation</dt>
-                    <dd>{renderPolicyText(formatLabel(playerView?.investigationResult ?? ""))}</dd>
-                  </div>
-                )}
-                {!showPrivateRole &&
-                  !showPrivateParty &&
-                  !playerView?.knownFascists.length &&
-                  !playerView?.legislativeHand.length &&
-                  !playerView?.policyPeek.length &&
-                  !playerView?.investigationResult && (
-                    <p className="helper">No private information to show right now.</p>
-                  )}
-              </dl>
-            )}
-          </article>
-        </section>
-
         <article className="panel compact-panel board-panel">
           <div className="board-grid">
             <div className="board-tile wide">
@@ -928,54 +1033,6 @@ export default function App() {
               <strong>{roomState.pendingVotes}</strong>
             </div>
           </div>
-        </article>
-
-        <article className="panel compact-panel players-panel">
-          <div className="players-header">
-            {roomState.phase !== "lobby" && (
-              <div className="unenacted-row">
-                <span className="liberal-text">L: {totalL}</span>
-                <span className="fascist-text">F: {totalF}</span>
-              </div>
-            )}
-          </div>
-          <ul className="player-grid">
-            {roomState.players.map((player) => {
-              const tags = [
-                player.id === playerId ? "you" : "",
-                player.id === roomState.hostPlayerId ? "host" : "",
-                player.id === roomState.presidentId ? "president" : "",
-                player.id === roomState.chancellorId ? "chancellor" : "",
-                !player.connected ? "offline" : "",
-                !player.alive ? "dead" : "",
-              ].filter(Boolean);
-
-              return (
-                <li
-                  key={player.id}
-                  className={[
-                    "player-tile",
-                    player.id === playerId ? "is-self" : "",
-                    !player.alive ? "is-dead" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <div className="player-heading">
-                    <strong>{player.name}</strong>
-                    <span className="player-id">({player.id})</span>
-                  </div>
-                  <div className="tag-row">
-                    {tags.map((tag) => (
-                      <span key={tag} className={`tag ${tag}`}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
         </article>
 
         <article className="panel compact-panel log-panel">
