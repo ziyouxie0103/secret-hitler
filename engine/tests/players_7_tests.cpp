@@ -24,7 +24,10 @@ void setup_and_visibility_for_seven_players() {
     const auto hitler_view = game.player_view("1");
     require(fascist_view.has_value(), "fascist view should exist");
     require(hitler_view.has_value(), "Hitler view should exist");
-    require(fascist_view->known_fascists.size() == 2U, "fascist should see one fascist plus Hitler");
+    require(fascist_view->known_hitler.has_value(), "fascist should know Hitler");
+    require(*fascist_view->known_hitler == "1", "fascist should see player 1 as Hitler");
+    require(fascist_view->known_fascists.size() == 1U, "fascist should see the other fascist");
+    require(fascist_view->known_fascists.front() == "3", "fascist should see player 3 as the other fascist");
     require(hitler_view->known_fascists.empty(), "Hitler should not know fascists");
 }
 

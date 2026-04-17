@@ -27,6 +27,12 @@ struct Room {
     std::optional<std::string> host_player_id;
     std::unordered_map<std::string, crow::websocket::connection*> connections_by_player;
     std::unordered_map<crow::websocket::connection*, std::string> players_by_connection;
+    bool event_state_initialized{false};
+    int last_liberal_policies{0};
+    int last_fascist_policies{0};
+    int round_counter{0};
+    std::string last_winner;
+    std::unordered_map<std::string, bool> last_alive_by_player;
 
     void remove_connection(crow::websocket::connection* connection) {
         const auto player_it = players_by_connection.find(connection);

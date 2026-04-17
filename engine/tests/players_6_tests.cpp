@@ -17,14 +17,16 @@ void setup_and_visibility_for_six_players() {
     require(game.config()->player_count == 6, "config should record six players");
     require(game.config()->liberal_count == 4, "six-player game should have four liberals");
     require(game.config()->non_hitler_fascist_count == 1, "six-player game should have one fascist");
-    require(!game.config()->hitler_knows_fascists, "Hitler should not know fascists in six-player game");
+    require(game.config()->hitler_knows_fascists, "Hitler should know the fascist in a six-player game");
 
     const auto hitler_view = game.player_view("1");
     const auto fascist_view = game.player_view("2");
     require(hitler_view.has_value(), "Hitler view should exist");
     require(fascist_view.has_value(), "fascist view should exist");
-    require(hitler_view->known_fascists.empty(), "Hitler should not know the fascist in a six-player game");
-    require(fascist_view->known_fascists == vector<string>{"1"}, "fascist should see Hitler");
+    require(hitler_view->known_fascists == vector<string>{"2"}, "Hitler should know the fascist in a six-player game");
+    require(fascist_view->known_hitler.has_value(), "fascist should know Hitler");
+    require(*fascist_view->known_hitler == "1", "fascist should see player 1 as Hitler");
+    require(fascist_view->known_fascists.empty(), "fascist should not see any other fascists in six players");
 }
 
 void term_limits_apply_to_previous_president_in_six_player_game() {

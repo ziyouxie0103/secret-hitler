@@ -144,19 +144,28 @@ json to_json(const sh::Room& room) {
 }
 
 json to_json(const sh::PlayerView& view) {
-    // Hard safeguard: Hitler never knows who the other fascists are by ID.
     json known_fascists = view.known_fascists;
-    if (view.role == sh::Role::Hitler) {
+    std::string known_hitler = view.known_hitler.value_or("");
+
+    // Defense in depth: 7-10 players, Hitler must not learn fascist IDs.
+    if (view.role == sh::Role::Hitler && view.num_players > 6) {
         known_fascists = json::array();
+    }
+
+    // Defense in depth: Only Fascists get the known Hitler id.
+    if (view.role != sh::Role::Fascist) {
+        known_hitler.clear();
     }
 
     return {
         {"playerId", view.player_id},
         {"playerName", view.player_name},
+        {"numPlayers", view.num_players},
         {"role", to_string(view.role)},
         {"party", to_string(view.party)},
         {"alive", view.alive},
         {"knownFascists", known_fascists},
+        {"hitler", known_hitler},
         {"legislativeHand", policies_to_json(view.legislative_hand)},
         {"policyPeek", policies_to_json(view.policy_peek)},
         {"investigationResult", view.investigation_result.has_value()
@@ -192,6 +201,104 @@ void send_public_state(const std::shared_ptr<sh::Room>& room) {
     }
 }
 
+void send_game_event(const std::shared_ptr<sh::Room>& room, const json& payload) {
+    const json message = {
+        {"type", "game_event"},
+        {"payload", payload},
+    };
+
+    for (const auto& [player_id, connection] : room->connections_by_player) {
+        if (connection != nullptr) {
+            connection->send_text(message.dump());
+        }
+    }
+}
+
+void emit_room_events(const std::shared_ptr<sh::Room>& room) {
+    const auto state = room->game->public_state();
+    auto name_for = [&state](const std::string& player_id) -> std::string {
+        if (player_id.empty()) {
+            return "";
+        }
+        for (const auto& player : state.players) {
+            if (player.id == player_id) {
+                return player.name;
+            }
+        }
+        return "";
+    };
+
+    if (!room->event_state_initialized) {
+        room->event_state_initialized = true;
+        room->last_liberal_policies = state.liberal_policies;
+        room->last_fascist_policies = state.fascist_policies;
+        room->last_winner = state.winner.value_or("");
+        room->last_alive_by_player.clear();
+        for (const auto& player : state.players) {
+            room->last_alive_by_player[player.id] = player.alive;
+        }
+        return;
+    }
+
+    const int liberal_delta = state.liberal_policies - room->last_liberal_policies;
+    const int fascist_delta = state.fascist_policies - room->last_fascist_policies;
+    for (int i = 0; i < liberal_delta; ++i) {
+        ++room->round_counter;
+        const std::string president_id = state.last_president_id.value_or("");
+        const std::string chancellor_id = state.last_chancellor_id.value_or("");
+        send_game_event(room, {
+            {"kind", "policy_enacted"},
+            {"round", room->round_counter},
+            {"policy", "liberal"},
+            {"presidentId", president_id},
+            {"presidentName", name_for(president_id)},
+            {"chancellorId", chancellor_id},
+            {"chancellorName", name_for(chancellor_id)},
+        });
+    }
+    for (int i = 0; i < fascist_delta; ++i) {
+        ++room->round_counter;
+        const std::string president_id = state.last_president_id.value_or("");
+        const std::string chancellor_id = state.last_chancellor_id.value_or("");
+        send_game_event(room, {
+            {"kind", "policy_enacted"},
+            {"round", room->round_counter},
+            {"policy", "fascist"},
+            {"presidentId", president_id},
+            {"presidentName", name_for(president_id)},
+            {"chancellorId", chancellor_id},
+            {"chancellorName", name_for(chancellor_id)},
+        });
+    }
+
+    room->last_liberal_policies = state.liberal_policies;
+    room->last_fascist_policies = state.fascist_policies;
+
+    for (const auto& player : state.players) {
+        const auto previous_it = room->last_alive_by_player.find(player.id);
+        const bool was_alive = previous_it == room->last_alive_by_player.end() ? player.alive : previous_it->second;
+        if (was_alive && !player.alive) {
+            send_game_event(room, {
+                {"kind", "execution"},
+                {"round", room->round_counter},
+                {"playerId", player.id},
+                {"playerName", player.name},
+            });
+        }
+        room->last_alive_by_player[player.id] = player.alive;
+    }
+
+    const std::string winner = state.winner.value_or("");
+    if (!winner.empty() && winner != room->last_winner) {
+        send_game_event(room, {
+            {"kind", "winner"},
+            {"round", room->round_counter},
+            {"winner", winner},
+        });
+    }
+    room->last_winner = winner;
+}
+
 void send_private_view(const std::shared_ptr<sh::Room>& room, const std::string& player_id) {
     const auto connection_it = room->connections_by_player.find(player_id);
     if (connection_it == room->connections_by_player.end() || connection_it->second == nullptr) {
@@ -214,6 +321,7 @@ void send_private_view(const std::shared_ptr<sh::Room>& room, const std::string&
 }
 
 void sync_room_state(const std::shared_ptr<sh::Room>& room) {
+    emit_room_events(room);
     send_public_state(room);
     for (const auto& [player_id, connection] : room->connections_by_player) {
         if (connection != nullptr) {

@@ -16,7 +16,7 @@ void setup_and_visibility_for_five_players() {
     require(game.config()->player_count == 5, "config should record five players");
     require(game.config()->liberal_count == 3, "five-player game should have three liberals");
     require(game.config()->non_hitler_fascist_count == 1, "five-player game should have one fascist");
-    require(!game.config()->hitler_knows_fascists, "Hitler should not know fascists in five-player game");
+    require(game.config()->hitler_knows_fascists, "Hitler should know the fascist in a five-player game");
     require(count_role(game, sh::Role::Hitler) == 1, "five-player game should have one Hitler");
     require(count_role(game, sh::Role::Fascist) == 1, "five-player game should have one fascist");
     require(count_role(game, sh::Role::Liberal) == 3, "five-player game should have three liberals");
@@ -27,9 +27,10 @@ void setup_and_visibility_for_five_players() {
     require(hitler_view.has_value(), "Hitler view should exist");
     require(fascist_view.has_value(), "fascist view should exist");
     require(liberal_view.has_value(), "liberal view should exist");
-    require(hitler_view->known_fascists.empty(), "Hitler should not know the fascist identity in a five-player game");
-    require(fascist_view->known_fascists.size() == 1U, "fascist should see Hitler");
-    require(fascist_view->known_fascists.front() == "1", "fascist should see player 1 as Hitler");
+    require(hitler_view->known_fascists == vector<string>{"2"}, "Hitler should know the fascist identity in a five-player game");
+    require(fascist_view->known_hitler.has_value(), "fascist should know Hitler");
+    require(*fascist_view->known_hitler == "1", "fascist should see player 1 as Hitler");
+    require(fascist_view->known_fascists.empty(), "fascist should not see any other fascists in five players");
     require(liberal_view->known_fascists.empty(), "liberal should not see secret identities");
 }
 

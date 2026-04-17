@@ -106,6 +106,8 @@ struct PlayerView {
     Role role{Role::Liberal};
     Party party{Party::Liberal};
     bool alive{true};
+    size_t num_players{0};
+    optional<string> known_hitler;
     vector<string> known_fascists;
     vector<Policy> legislative_hand;
     vector<Policy> policy_peek;

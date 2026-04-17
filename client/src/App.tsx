@@ -31,10 +31,12 @@ type RoomState = {
 type PlayerView = {
   playerId: string;
   playerName: string;
+  numPlayers: number;
   role: string;
   party: string;
   alive: boolean;
   knownFascists: string[];
+  hitler: string;
   legislativeHand: string[];
   policyPeek: string[];
   investigationResult: string;
@@ -44,6 +46,21 @@ type ServerMessage =
   | { type: "joined_room"; payload?: { roomCode?: string; playerId?: string; hostPlayerId?: string } }
   | { type: "room_state"; payload?: RoomState }
   | { type: "player_view"; payload?: PlayerView }
+  | {
+      type: "game_event";
+      payload?: {
+        kind: "policy_enacted" | "execution" | "winner";
+        round: number;
+        policy?: "liberal" | "fascist";
+        presidentId?: string;
+        presidentName?: string;
+        chancellorId?: string;
+        chancellorName?: string;
+        playerId?: string;
+        playerName?: string;
+        winner?: string;
+      };
+    }
   | { type: "sync_ack"; message?: string }
   | { type: "error"; message?: string };
 
@@ -165,10 +182,7 @@ export default function App() {
   const [showRoleReveal, setShowRoleReveal] = useState(false);
   const [showGameOver, setShowGameOver] = useState(false);
   const prevPhase = useRef<string>("lobby");
-  const previousPolicyCountsRef = useRef({ liberal: 0, fascist: 0 });
   const prevActionType = useRef<string | null>(null);
-  const previousPlayersRef = useRef<Record<string, boolean>>({});
-  const previousWinnerRef = useRef("");
   const [roundLog, setRoundLog] = useState<RoundLogEntry[]>([]);
   const [privateOpen, setPrivateOpen] = useState(false);
   const [selectedVote, setSelectedVote] = useState<"ja" | "nein" | "">("");
@@ -178,10 +192,6 @@ export default function App() {
   const lastPeekRef = useRef<string[]>([]);
   const [pendingTargetId, setPendingTargetId] = useState<string | null>(null);
   const [policyLocked, setPolicyLocked] = useState(false);
-  const aliveSignature = useMemo(
-    () => roomState.players.map((player) => `${player.id}:${player.alive ? 1 : 0}`).join("|"),
-    [roomState.players],
-  );
   
   useEffect(() => {
     let wsUrl = import.meta.env.VITE_WS_URL;
@@ -203,6 +213,9 @@ export default function App() {
     socket.onclose = () => {
       setJoined(false);
       setStatus("Disconnected");
+      setRoundLog([]);
+      setEventNotice("");
+      setEventKind("");
     };
     socket.onerror = () => setStatus("Connection error");
     socket.onmessage = (event) => {
@@ -236,6 +249,79 @@ export default function App() {
         return;
       }
 
+      if (message.type === "game_event" && message.payload) {
+        const payload = message.payload;
+
+        if (payload.kind === "policy_enacted" && payload.policy) {
+          const enactedPolicy = payload.policy === "liberal" ? "Liberal" : "Fascist";
+          const president =
+            payload.presidentId
+              ? `${payload.presidentName || "Unknown"} (${payload.presidentId})`
+              : "nobody";
+          const chancellor =
+            payload.chancellorId
+              ? `${payload.chancellorName || "Unknown"} (${payload.chancellorId})`
+              : "nobody";
+          setRoundLog((previousLog) => {
+            if (previousLog.some((entry) => entry.round === payload.round)) {
+              return previousLog;
+            }
+
+            return [
+              ...previousLog,
+              {
+                round: payload.round,
+                president,
+                chancellor,
+                enactedPolicy,
+              },
+            ];
+          });
+
+          setEventKind("policy");
+          setEventNotice(`A ${payload.policy} policy was enacted.`);
+          setNoticeKey((value) => value + 1);
+          return;
+        }
+
+        if (payload.kind === "execution" && payload.playerId) {
+          const executed = payload.playerName
+            ? `${payload.playerName} (${payload.playerId})`
+            : payload.playerId;
+
+          setEventKind("execution");
+          setEventNotice(`Player ${executed} was executed.`);
+          setNoticeKey((value) => value + 1);
+          setRoundLog((previousLog) => {
+            if (previousLog.length === 0) {
+              return previousLog;
+            }
+
+            const nextLog = [...previousLog];
+            const lastEntry = nextLog[nextLog.length - 1];
+            nextLog[nextLog.length - 1] = {
+              ...lastEntry,
+              specialEvent: `Execution: ${executed}`,
+            };
+            return nextLog;
+          });
+          return;
+        }
+
+        if (payload.kind === "winner" && payload.winner) {
+          setEventKind("winner");
+          const winnerText = payload.winner === "liberals" ? "Liberals" : "Fascists";
+          const colorClass = payload.winner === "liberals" ? "liberal-text" : "fascist-text";
+          setEventNotice(
+            <>
+              <span className={colorClass}>{winnerText}</span> win the game.
+            </>,
+          );
+          setNoticeKey((value) => value + 1);
+          return;
+        }
+      }
+
       if (message.type === "sync_ack") {
         setStatus("Refreshing room state...");
         return;
@@ -264,113 +350,11 @@ export default function App() {
 
   useEffect(() => {
     if (!joined) {
-      previousPolicyCountsRef.current = {
-        liberal: roomState.liberalPolicies,
-        fascist: roomState.fascistPolicies,
-      };
-      previousPlayersRef.current = Object.fromEntries(
-        roomState.players.map((player) => [player.id, player.alive]),
-      );
-      previousWinnerRef.current = roomState.winner;
       setEventKind("");
       setEventNotice("");
       setRoundLog([]);
-      return;
     }
-
-    const previous = previousPolicyCountsRef.current;
-    const liberalDelta = Math.max(0, roomState.liberalPolicies - previous.liberal);
-    const fascistDelta = Math.max(0, roomState.fascistPolicies - previous.fascist);
-    const nextEntries = [
-      ...Array.from({ length: liberalDelta }, () => "Liberal"),
-      ...Array.from({ length: fascistDelta }, () => "Fascist"),
-    ];
-
-    previousPolicyCountsRef.current = {
-      liberal: roomState.liberalPolicies,
-      fascist: roomState.fascistPolicies,
-    };
-
-    if (nextEntries.length > 0) {
-      const latestPolicy = nextEntries[nextEntries.length - 1];
-      setEventKind("policy");
-
-      const policyColorClass = latestPolicy.toLowerCase() === "liberal" ? "liberal-text" : "fascist-text";
-      let notice: React.ReactNode = (
-        <span className={policyColorClass} style={{ fontWeight: 'bold' }}>
-          {latestPolicy} Policy
-        </span>
-      );
-
-      if (latestPolicy === "Fascist") {
-        const ordinal = ["", "first", "second", "third", "fourth", "fifth", "sixth"][roomState.fascistPolicies] || "latest";
-        if (roomState.pendingExecutivePower && roomState.pendingExecutivePower !== "none") {
-          const powerLabel = formatLabel(roomState.pendingExecutivePower);
-          notice = (
-            <>
-              The {ordinal} <span className="fascist-text">fascist</span> policy was enacted! The president got {powerLabel} power.
-            </>
-          );
-        } else if (roomState.fascistPolicies === 3 && (roomState.players.length === 5 || roomState.players.length === 6)) {
-          notice = (
-            <>
-              The third <span className="fascist-text">fascist</span> policy was enacted! The president got to peek at the deck.
-            </>
-          );
-        }
-      }
-
-      setEventNotice(notice);
-      setNoticeKey((value) => value + 1);
-      setRoundLog((previousLog) => [
-        ...previousLog,
-        ...nextEntries.map((enactedPolicy, index) => ({
-          round: previousLog.length + index + 1,
-          president: displayPlayer(roomState.lastPresidentId || roomState.presidentId || ""),
-          chancellor: displayPlayer(roomState.lastChancellorId || roomState.chancellorId || ""),
-          enactedPolicy,
-        })),
-      ]);
-    }
-
-    const previousPlayers = previousPlayersRef.current;
-    const executedPlayers = roomState.players.filter((player) => previousPlayers[player.id] && !player.alive);
-    previousPlayersRef.current = Object.fromEntries(
-      roomState.players.map((player) => [player.id, player.alive]),
-    );
-
-    if (executedPlayers.length > 0) {
-      const executedNames = executedPlayers.map((player) => `${player.name} (${player.id})`).join(", ");
-      setEventKind("execution");
-      setEventNotice(`Player ${executedNames} was executed.`);
-      setNoticeKey((value) => value + 1);
-      setRoundLog((previousLog) => {
-        if (previousLog.length === 0) {
-          return previousLog;
-        }
-
-        const nextLog = [...previousLog];
-        const lastEntry = nextLog[nextLog.length - 1];
-        nextLog[nextLog.length - 1] = {
-          ...lastEntry,
-          specialEvent: `Execution: ${executedNames}`,
-        };
-        return nextLog;
-      });
-    }
-
-    if (roomState.winner && previousWinnerRef.current !== roomState.winner) {
-      setEventKind("winner");
-      const winnerText = roomState.winner === "liberals" ? "Liberals" : "Fascists";
-      const colorClass = roomState.winner === "liberals" ? "liberal-text" : "fascist-text";
-      setEventNotice(
-        <><span className={colorClass}>{winnerText}</span> win the game.</>
-      );
-      setNoticeKey((value) => value + 1);
-    }
-
-    previousWinnerRef.current = roomState.winner;
-  }, [aliveSignature, joined, roomState.fascistPolicies, roomState.liberalPolicies, roomState.winner]);
+  }, [joined]);
 
   const currentPlayer = useMemo(
     () => roomState.players.find((player) => player.id === playerId) ?? null,
@@ -675,23 +659,25 @@ export default function App() {
                   )}
                 </div>
               )}
-              {playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
+              {(Boolean(playerView?.knownFascists.length) || Boolean(playerView?.hitler)) ? (
                 <div>
-                  <dt>Teammates</dt>
+                  <dt>Known</dt>
                   <dd>
-                    {roomState.players.length <= 6
-                      ? "You have one fascist teammate, but you do not know their identity."
-                      : `You have ${roomState.players.length >= 9 ? 3 : 2} fascist teammates, but you do not know who they are.`}
+                    Fascists:{" "}
+                    {playerView?.knownFascists.length
+                      ? playerView.knownFascists.map((id) => playerNameById.get(id) || id).join(", ")
+                      : "none"}
+                    {playerView?.hitler
+                      ? ` | Hitler: ${playerNameById.get(playerView.hitler) || playerView.hitler}`
+                      : ""}
                   </dd>
                 </div>
-              ) : Boolean(playerView?.knownFascists.length) && (
+              ) : playerView?.role === "hitler" && roomState.phase !== "lobby" ? (
                 <div>
-                  <dt>Known fascists</dt>
-                  <dd>
-                    {playerView?.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}
-                  </dd>
+                  <dt>Known</dt>
+                  <dd>You do not know who the fascists are.</dd>
                 </div>
-              )}
+              ) : null}
               {Boolean(playerView?.investigationResult) && (
                 <div>
                   <dt>Investigation</dt>
@@ -701,6 +687,7 @@ export default function App() {
               {!showPrivateRole &&
                 !showPrivateParty &&
                 !playerView?.knownFascists.length &&
+                !playerView?.hitler &&
                 !playerView?.legislativeHand.length &&
                 !playerView?.policyPeek.length &&
                 !playerView?.investigationResult && (
@@ -1007,11 +994,34 @@ export default function App() {
             </div>
             {playerView?.role !== "liberal" && (
               <div className="helper" style={{ marginTop: '0.5rem', fontSize: '1.1rem', color: '#f7f1e6' }}>
-                {playerView?.knownFascists && playerView.knownFascists.length > 0 ? (
-                  <strong>Teammates: {playerView.knownFascists.map(id => playerNameById.get(id) || id).join(", ")}</strong>
-                ) : (
-                  <span>You don't know who your teammates are.</span>
-                )}
+                {(() => {
+                  const knownFascists =
+                    playerView?.knownFascists?.map((id) => playerNameById.get(id) || id) ?? [];
+                  const knownHitler = playerView?.hitler ? (playerNameById.get(playerView.hitler) || playerView.hitler) : "";
+
+                  if (playerView?.role === "hitler") {
+                    return knownFascists.length > 0 ? (
+                      <strong>Fascist teammate: {knownFascists.join(", ")}</strong>
+                    ) : (
+                      <span>You don&apos;t know who the fascists are.</span>
+                    );
+                  }
+
+                  if (playerView?.role === "fascist") {
+                    return (
+                      <div style={{ display: "grid", gap: "0.35rem" }}>
+                        <div>
+                          <strong>Hitler: {knownHitler || "unknown"}</strong>
+                        </div>
+                        <div>
+                          <strong>Other fascists: {knownFascists.length ? knownFascists.join(", ") : "none"}</strong>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return <span>You don&apos;t know who your teammates are.</span>;
+                })()}
               </div>
             )}
             <button type="button" onClick={() => setShowRoleReveal(false)}>

@@ -280,7 +280,7 @@ bool Game::enact_policy(Policy policy, bool from_top_deck) {
         return true;
     }
 
-    if (policy == Policy::Fascist && config_.has_value() && !from_top_deck) {
+    if (policy == Policy::Fascist && config_.has_value()) {
         const ExecutivePower power = config_->fascist_track[static_cast<size_t>(fascist_policies_ - 1)];
         if (power == ExecutivePower::None) {
             pending_executive_power_.reset();
@@ -338,7 +338,7 @@ vector<string> Game::visible_fascists_for_player(size_t index) const {
 
         const Player& other = players_[i];
         if (viewer.identity == Role::Fascist) {
-            if (other.identity == Role::Fascist || other.identity == Role::Hitler) {
+            if (other.identity == Role::Fascist) {
                 visible_fascists.push_back(other.id);
             }
             continue;
@@ -567,7 +567,17 @@ optional<PlayerView> Game::player_view(const string& player_id) const {
     view.role = player.identity;
     view.party = player.party;
     view.alive = player.alive;
+    view.num_players = players_.size();
     view.known_fascists = visible_fascists_for_player(*index);
+
+    if (player.identity == Role::Fascist) {
+        for (const auto& other : players_) {
+            if (other.identity == Role::Hitler) {
+                view.known_hitler = other.id;
+                break;
+            }
+        }
+    }
 
     if (president_id_.has_value() && *president_id_ == player_id) {
         view.legislative_hand = president_hand_;

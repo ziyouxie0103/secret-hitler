@@ -116,3 +116,5 @@ When a chancellor is nominated, the server does not send a special standalone
 - `pendingVotes` starts at `0`
 
 That is the signal that all living players should vote.
+
+ngrok http 18080
